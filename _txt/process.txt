@@ -1,0 +1,3 @@
+0) Edit the segmentation data: "/Users/murrayla/Documents/main_PhD/BIG_SEG/filtered.npy" to create new data
+    here, we remove any non-single cell segmentation data.
+1) handle single cell segmentation data
