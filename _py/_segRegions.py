@@ -15,12 +15,20 @@ import pandas as pd
 import seaborn as sns
 from scipy import ndimage
 import matplotlib.cm as cm
+import multiprocessing as mp
 import matplotlib.pyplot as plt
 
 # ∆ Constants
 M_D, E_D = 2545.58, 2545.58*2
-Y_BOUNDS = [2000, 3500]
+Y_BOUNDS = [1800, 3600]
 X_BOUNDS = [int((Y_BOUNDS[1]-M_D)), int(E_D-(Y_BOUNDS[1]-M_D))]
+
+# ∆ Processing stages
+def process_layer(args):
+    seg_np, l = args
+    r_seg_np = ndimage.rotate(seg_np[:, :, l], -45, reshape=True, order=1)[:, Y_BOUNDS[0]:Y_BOUNDS[1]]
+    ids = np.unique(r_seg_np).tolist()
+    return ids
 
 # ∆ Determine instances
 def instance_id(seg_np):
@@ -29,20 +37,18 @@ def instance_id(seg_np):
     # ∆ Data presets
     x, y, z = seg_np.shape
 
-    # ∆ Iterate layers
+    # ∆ Enter parallel
+    with mp.Pool(processes=mp.cpu_count()) as pool:
+        results = pool.map(process_layer, [(seg_np, l) for l in range(0, z, 1)])
+
+    # ∆ Collect results
     labs = []
-    print(f"dims: {x}, {y}, {z}")
-    for l in range(0, z, 1):
-
-        # ∆ Rotate data
-        r_seg_np = ndimage.rotate(seg_np[:, :, l], -45, reshape=True)[:, Y_BOUNDS[0]:Y_BOUNDS[1]]
-
-        # ∆ Determine unique data
-        ids = np.unique(r_seg_np).tolist()
+    for ids in results:
         labs.extend(ids)
 
     # ∆ Write data to file
     lab_set = list(set(labs))
+    print(len(lab_set))
     with open('_txt/labels.txt', 'w') as f:
         for lab in lab_set:
             f.write(f"{lab}\n")
@@ -54,26 +60,29 @@ def reg_images(raw_np, seg_np):
     # ∆ Data presets
     x, y, z = raw_np.shape
     layers = list(map(int, np.linspace(0, z-1, 10)))
+    iso_df = pd.read_csv("/Users/murrayla/Documents/main_PhD/P_MYOANI/_csv/reg_stats.csv")
+    ids = iso_df["ID"]
 
     # ∆ Iterate layers
     for l in layers:
 
         # ∆ Rotate data
-        r_raw_np = ndimage.rotate(raw_np[:, :, l], -45, reshape=True)
-        r_seg_np = ndimage.rotate(seg_np[:, :, l], -45, reshape=True)
+        r_raw_np = ndimage.rotate(raw_np[:, :, l], -45, reshape=True, order=1)
+        r_seg_np = ndimage.rotate(seg_np[:, :, l], -45, reshape=True, order=1)
 
         # ∆ Permute data
-        r_raw_np[r_seg_np >= 1] = 255
-        r_raw_np[:Y_BOUNDS[0], :] = 255
-        r_raw_np[Y_BOUNDS[1]:, :] = 255
-        r_raw_np[:, :X_BOUNDS[0]] = 255
-        r_raw_np[:, X_BOUNDS[1]:] = 255
+        for n in ids:
+            r_raw_np[r_seg_np == n] = 255
+        # r_raw_np[:Y_BOUNDS[0], :] = 255
+        # r_raw_np[Y_BOUNDS[1]:, :] = 255
+        # r_raw_np[:, :X_BOUNDS[0]] = 255
+        # r_raw_np[:, X_BOUNDS[1]:] = 255
 
         # ∆ Display images
         plt.gca().set_xticks(np.arange(0, int(2545.58*2), 500))
         plt.gca().set_yticks(np.arange(0, int(2545.58*2), 500))
         plt.grid()
-        plt.imshow(r_raw_np, cmap="gray", origin="lower")
+        plt.imshow(r_raw_np, cmap="gray", origin='lower')
         plt.savefig(f"_png/rot_{l}.png", bbox_inches='tight', pad_inches=0.2, dpi=1000)
         plt.close()
 

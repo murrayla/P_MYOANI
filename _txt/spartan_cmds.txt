@@ -3,7 +3,7 @@ scp /Users/murrayla/Documents/main_PhD/P_MYOANI/_py/_segRegions.py murrayla@spar
 
 
 FROM:
-scp murrayla@spartan.hpc.unimelb.edu.au:/data/gpfs/projects/punim1102/liam/P_Pub1/slurm-8281426.out /Users/murrayla/Documents/main_PhD/P_MYOANI/_txt/
+scp murrayla@spartan.hpc.unimelb.edu.au:/data/gpfs/projects/punim1102/liam/P_Pub1/_txt/labels.txt /Users/murrayla/Documents/main_PhD/P_MYOANI/
 
 
 FROM: (whole group)
