@@ -1,6 +1,0 @@
-Info    : Reading '/data/gpfs/projects/punim1102/liam/P_Pub1/_msh/EMGEO_1000.msh'...
-Info    : 27 entities
-Info    : 5276 nodes
-Info    : 4339 elements
-Info    : Done reading '/data/gpfs/projects/punim1102/liam/P_Pub1/_msh/EMGEO_1000.msh'
-slurmstepd: error: *** JOB 8371803 ON spartan-bm144 CANCELLED AT 2025-04-19T18:42:22 DUE TO TIME LIMIT ***

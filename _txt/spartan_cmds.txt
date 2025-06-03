@@ -1,17 +1,20 @@
 TO:
-scp /Users/murrayla/Documents/main_PhD/P_MYOANI/_py/_segRegions.py murrayla@spartan.hpc.unimelb.edu.au:/data/gpfs/projects/punim1102/liam/P_Pub1
+scp /Users/murrayla/Documents/main_PhD/P_MYOANI/_feSim.py murrayla@spartan.hpc.unimelb.edu.au:/data/gpfs/projects/punim1102/liam/P_MYOANI
 
 
 FROM:
 scp murrayla@spartan.hpc.unimelb.edu.au:/data/gpfs/projects/punim1102/liam/P_Pub1/_txt/labels.txt /Users/murrayla/Documents/main_PhD/P_MYOANI/
+scp -r murrayla@spartan.hpc.unimelb.edu.au:/data/gpfs/projects/punim1102/liam/P_MYOANI/_bp/_0/_ORI.bp /Users/murrayla/Documents/main_PhD/P_MYOANI/
 
 
 FROM: (whole group)
 scp -r murrayla@spartan.hpc.unimelb.edu.au:/data/gpfs/projects/punim1102/liam/P_Pub1/_bp/_SPH/_test_1000_20.bp /Users/murrayla/Documents/main_PhD/FEniCSx/FEniCSx/P_Passive_Contraction/_bp/
 
+scp -r /Users/murrayla/Documents/main_PhD/P_MYOANI murrayla@spartan.hpc.unimelb.edu.au:/data/gpfs/projects/punim1102/liam/P_MYOANI
+
 
 SETUP:
-sinteractive -p interactive --time=01:00:00 --cpus-per-task=1 --mem=128G
+sinteractive -p interactive --time=02:00:00 --cpus-per-task=4 --mem=128G
 module purge
 module load Anaconda3/2024.02-1
 eval "$(conda shell.bash hook)"
