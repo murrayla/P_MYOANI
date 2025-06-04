@@ -1,0 +1,5 @@
+tests: ['4']
+m_ref: 1
+test: 4, hlz: [0.059, 8.023, 18.472, 16.026]
+APPLY 5% DISP | val ~ 550.0
+SOLVED 5% IN:5, True

@@ -81,150 +81,50 @@ def green_tensor(u):
 
     return eps
 
-# ∆ Gaussian smoothing
-def gauss_smooth(coords, data, zid, nvecs):
-
-    # ∆ Empty data
-    s_data = np.zeros_like(data)
-
-    # ∆ Toleratnce
-    tol = 1e-8
-
-    # ∆ Iterate coordinates
-    for i in range(0, len(coords), 1):
-
-        # ∆ Only reorganise if point exists
-        if zid[i]:
-
-            # ∆ Set standard deviations
-            sig_par = 2000
-            sig_per = 200
-
-            # ∆ Extract current vector 
-            curr = nvecs[i]
-
-            # ∆ Determine distances
-            vecs = coords - coords[i]
-            dist = np.dot(vecs, curr)
-            perp_vecs = vecs - np.outer(dist, curr)
-            perp_dist = np.linalg.norm(perp_vecs, axis=1)
-
-            # ∆ Compute weights
-            wei = np.exp(-0.5 * (
-                (dist / sig_par)**2 +
-                (perp_dist / sig_per)**2
-            ))
-            wei *= zid
-
-        else:
-
-            # ∆ Calculate distances
-            dist_x = coords[:, 0] - coords[i, 0]
-            dist_y = coords[:, 1] - coords[i, 1]
-            dist_z = coords[:, 2] - coords[i, 2]
-
-            # ∆ Set standard deviations
-            sig_x = 2000
-            sig_y = 200
-            sig_z = 200
-
-            # ∆ Calculate weights based on iff nodes have been assigned
-            wei = np.exp(-0.5 * (
-                (dist_x / sig_x)**2 + 
-                (dist_y / sig_y)**2 + 
-                (dist_z / sig_z)**2
-            ))
-            wei *= zid
-
-            # continue
-
-        # ∆ Condition on if data is relevant
-        norm = wei.sum()
-        if norm > tol:
-            wei /= norm
-            s_data[i] = np.sum(wei * data)
-        else:
-            s_data[i] = data[i]
-
-    return s_data
-
 # ∆ Smooth data globally
 def global_smooth(coords, data):
 
-    sigma_x, sigma_y, sigma_z = 1000, 400, 400
     tol = 1e-8
-    N = len(data)
+    # ∆ Set standard deviations
+    sx, sy, sz = 1000, 400, 400
 
-    # Build KD-tree for fast neighbor queries
+    # ∆ Nearest neighbour tree
     tree = KDTree(coords)
 
-    # Prepare output and mask
-    smoothed = np.zeros_like(data)
+    # ∆ Store new data and mask
+    s_data = np.zeros_like(data)
     mask = (data != 0).astype(float)
 
-    # Determine maximum search radius
-    max_radius = 2000
+    # ∆ Iterate data and store 
+    for i in range(0, len(coords), 1):
 
-    for i in range(N):
-        # Query neighbors within max radius
-        idxs = tree.query_ball_point(coords[i], r=max_radius)
-        if not idxs:
-            continue
+        # ∆ Create neighbours
+        kn_idx = tree.query_ball_point(coords[i], r=2*sx)
 
-        # Extract local coords and values
-        neighbors = coords[idxs]
-        values = data[idxs]
-        local_mask = mask[idxs]
+        # ∆ Assign values
+        knn = coords[kn_idx]
+        vals = data[kn_idx]
+        knn_mask = mask[kn_idx]
 
-        # Compute anisotropic distances
-        dx = neighbors[:, 0] - coords[i, 0]
-        dy = neighbors[:, 1] - coords[i, 1]
-        dz = neighbors[:, 2] - coords[i, 2]
+        # ∆ Compute distances
+        dx = knn[:, 0] - coords[i, 0]
+        dy = knn[:, 1] - coords[i, 1]
+        dz = knn[:, 2] - coords[i, 2]
 
-        weights = np.exp(-0.5 * (
-            (dx / sigma_x)**2 +
-            (dy / sigma_y)**2 +
-            (dz / sigma_z)**2
-        ))
+        # ∆ Compute weights
+        wei = np.exp(-0.5 * ((dx / sx)**2 + (dy / sy)**2 + (dz / sz)**2))
 
-        # Apply mask-aware smoothing
-        w_data = weights * values * local_mask
-        w_mask = weights * local_mask
+        # ∆ Mask weight data
+        w_data = wei * vals * knn_mask
+        w_mask = wei * knn_mask
 
-        denom = w_mask.sum()
-        smoothed[i] = w_data.sum() / (denom + tol) if denom > tol else 0.0
+        # ∆ Store
+        if w_mask.sum() > tol: 
+            s_data[i] = w_data.sum() / (w_mask.sum() + tol)
+        else:
+            s_data[i] = 0.0
 
-    return smoothed
-
-    # # ∆ Set standard deviations
-    # sig_x = 1000
-    # sig_y = 400
-    # sig_z = 400
-    # tol = 1e-8
-
-    # # ∆ Store new data
-    # s_data = np.zeros_like(data)
-
-    # # ∆ Iterate data and store 
-    # for i in range(0, len(coords), 1):
-
-    #     # ∆ Determine distances 
-    #     dist_x = coords[:, 0] - coords[i, 0]
-    #     dist_y = coords[:, 1] - coords[i, 1]
-    #     dist_z = coords[:, 2] - coords[i, 2]
-
-    #     # ∆ Weights
-    #     wei = np.exp(-0.5 * (
-    #         (dist_x / sig_x)**2 + 
-    #         (dist_y / sig_y)**2 + 
-    #         (dist_z / sig_z)**2
-    #     ))
-    #     wei /= wei.sum() + tol
-
-    #     # ∆ Store
-    #     s_data[i] = np.sum(wei * data)
-
-    # return s_data
+    return s_data
 
 def angle_assign(t, coords):
 
@@ -297,8 +197,8 @@ def angle_assign(t, coords):
         azi[kn_idx] = azi_val
         ele[kn_idx] = ele_val
         sph[kn_idx] = sph_val
-        zid[kn_idx] = 1
         nvecs[kn_idx] = nvec
+        zid[kn_idx] = 1
 
         # ∆ Extend along directions of interest
         for a in np.linspace(-1, 1, s_step):
@@ -316,31 +216,37 @@ def angle_assign(t, coords):
                 azi[j] = azi_val
                 ele[j] = ele_val
                 sph[j] = sph_val
-                zid[j] = 1
                 nvecs[j] = nvec
-                # if not(a):
-                #     zs[j] = 1
-                # if zid[j] == 0:
-                #     azi[j] = azi_val
-                #     ele[j] = ele_val
-                #     sph[j] = sph_val
-                #     zid[j] = 1
-                #     nvecs[j] = nvec
-
-    # ∆ Smooth relevant points
-    # azi = gauss_smooth(coords, azi, zid, nvecs)
-    # ele = gauss_smooth(coords, ele, zid, nvecs)
-    # sph = gauss_smooth(coords, sph, zid, nvecs)
+                zid[j] = 1
 
     # ∆ Global smoothing
     azi = global_smooth(coords, azi)
     ele = global_smooth(coords, ele)
     sph = global_smooth(coords, sph)
 
+    # ∆ Final smoothing 
+    def final_pass(coords, data):
+        tol = 1e-8
+        sx, sy, sz = 200, 200, 200
+        s_data = np.zeros_like(data)
+        for i in range(0, len(coords), 1):
+            dx = coords[:, 0] - coords[i, 0]
+            dy = coords[:, 1] - coords[i, 1]
+            dz = coords[:, 2] - coords[i, 2]
+            wei = np.exp(-0.5 * ((dx / sx)**2 + (dy / sy)**2 + (dz / sz)**2))
+            wei /= wei.sum() + tol
+            s_data[i] = np.sum(wei * data)
+        return s_data
+    
+    # ∆ Simple smoothing
+    azi = final_pass(coords, azi)
+    ele = final_pass(coords, ele)
+    sph = final_pass(coords, sph)
+
     return azi, ele, sph, zid, zs
 
 # ∆ Fenics simulation
-def fx_(t, file, m_ref, hlz, sim):
+def fx_(t, file, m_ref, hlz, sim, dpm):
 
     # ∆ Begin 't' log
     with open(f"_txt/{sim}.txt", 'a') as simlog:
@@ -411,7 +317,7 @@ def fx_(t, file, m_ref, hlz, sim):
 
     # ∆ Create forward transform
     # azi_v0x, ele_v0x = Function(V0x), Function(V0x)
-    mapping = make_mapping(V, Tes)
+    # mapping = make_mapping(Tes, V)
     # azi_v0x.x.array[:] = azi[mapping]
     # ele_v0x.x.array[:] = ele[mapping]
 
@@ -429,6 +335,7 @@ def fx_(t, file, m_ref, hlz, sim):
     #     [-ufl.sin(ele_v0x), 0, ufl.cos(ele_v0x)]
     # ])
 
+    mapping = make_mapping(Tes, V)
     # ∆ Create push tensor function
     Push = Function(Tes)
     # µ Reshape array for assignment
@@ -437,9 +344,9 @@ def fx_(t, file, m_ref, hlz, sim):
     r_push = p_arr.reshape((n_nodes, 9))
 
     # ∆ Assign data to each position
-    r_push[:, 0], r_push[:, 1], r_push[:, 2] = CA*CE, -SA, CA*SE
-    r_push[:, 3], r_push[:, 4], r_push[:, 5] = SA*CE, CA, SA*SE
-    r_push[:, 6], r_push[:, 7], r_push[:, 8] = -SE, 0, CE
+    r_push[:, 0], r_push[:, 1], r_push[:, 2] = (CA*CE)[mapping], (-SA)[mapping], (CA*SE)[mapping]
+    r_push[:, 3], r_push[:, 4], r_push[:, 5] = (SA*CE)[mapping], (CA)[mapping], (SA*SE)[mapping]
+    r_push[:, 6], r_push[:, 7], r_push[:, 8] = (-SE)[mapping], (np.zeros_like(CA))[mapping], (CE)[mapping]
     Push.x.array[:] = p_arr.reshape(-1)
 
     # Push = ufl.Identity(DIM)
@@ -546,7 +453,7 @@ def fx_(t, file, m_ref, hlz, sim):
     dx = ufl.Measure(integral_type="dx", domain=domain, metadata={"quadrature_degree": QUADRATURE})
     R = ufl.as_tensor(s_piola[a, b] * F[j, b] * covDev[j, a]) * dx + q * (J - 1) * dx
 
-    # log.set_log_level(log.LogLevel.INFO)
+    log.set_log_level(log.LogLevel.INFO)
 
     # ∆ Data store
     dis = Function(V) 
@@ -575,7 +482,7 @@ def fx_(t, file, m_ref, hlz, sim):
     win = 0
 
     # ∆ Apply displacement
-    k = 20
+    k = dpm
     du = CUBE["x"] * PXLS["x"] * (k / 100)
 
     with open(f"_txt/{sim}.txt", 'a') as simlog:
@@ -664,7 +571,7 @@ def fx_(t, file, m_ref, hlz, sim):
     return num_its, df_dict, strains, win 
 
 # ∆ Main
-def main(tests, m_ref, sim):
+def main(tests, m_ref, sim, dpm):
 
     # ∆ Open log file
     with open(f"_txt/{sim}.txt", 'w') as simlog:
@@ -685,7 +592,7 @@ def main(tests, m_ref, sim):
         file = f"_msh/em_{m_ref}.msh"
 
         # ∆ Simulation 
-        its, df_dict, strains, win = fx_(t, file, m_ref, hlz, sim)
+        its, df_dict, strains, win = fx_(t, file, m_ref, hlz, sim, dpm)
         if win: wins.append(t)
 
         if its == -1:
@@ -704,6 +611,8 @@ if __name__ == '__main__':
     # tests = ["0"]
     tests = ["test"] + [x for x in [str(y) for y in range(0, 17, 1)]]
     tests = [x for x in [str(y) for y in range(0, 5, 1)]]
+    tests = ["4"]
     m_ref = 1
-    sim = "N20"
-    main(tests, m_ref, sim)
+    dpm = 5
+    sim = "N" + str(dpm)
+    main(tests, m_ref, sim, dpm)
