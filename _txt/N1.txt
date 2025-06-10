@@ -1,0 +1,4 @@
+tests: ['test']
+m_ref: 1000
+test: test, hlz: [0.059, 8.023, 18.472, 16.026]
+APPLY 1% DISP | val ~ 110.0

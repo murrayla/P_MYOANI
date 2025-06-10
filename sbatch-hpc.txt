@@ -6,7 +6,7 @@
 #SBATCH --partition=sapphire
 
 # The name of the job:
-#SBATCH --job-name="N15"
+#SBATCH --job-name="MPI-1-15"
 
 # The project ID which this job should run under:
 #SBATCH --account="punim1102"
@@ -15,7 +15,7 @@
 #SBATCH --ntasks=4
 
 # The amount of memory in megabytes per cpu core:
-#SBATCH --mem-per-cpu=512000
+#SBATCH --mem-per-cpu=256000
 
 # Use this email address:
 #SBATCH --mail-user=murrayla@student.unimelb.edu.au
@@ -29,7 +29,7 @@
 #SBATCH --mail-type=END
 
 # The maximum running time of the job in days-hours:mins:sec
-#SBATCH --time=0-1:00:00
+#SBATCH --time=0-3:00:00
 
 # check that the script is launched with sbatch
 if [ "x$SLURM_JOB_ID" == "x" ]; then
@@ -46,7 +46,7 @@ module load Anaconda3/2024.02-1
 # The job command(s):
 eval "$(conda shell.bash hook)"
 conda activate fenics
-python _feSim.py
+mpirun -n 4 python _feSim.py
 
 ##DO NOT ADD/EDIT BEYOND THIS LINE##
 ##Job monitor command to list the resource usage
