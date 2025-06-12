@@ -1,4 +1,12 @@
-tests: ['0', '4']
+tests: ['test', '0', '4']
 m_ref: 1
-test: 0, hlz: [0.059, 8.023, 18.472, 16.026]
+test: test, gcc: [0.8, 18, 8]
 APPLY 15% DISP | val ~ 1650.0
+SOLVED i_{23}% IN:6, True
+test: 0, gcc: [0.8, 18, 8]
+APPLY 15% DISP | val ~ 1650.0
+FAILED.
+test: 4, gcc: [0.8, 18, 8]
+APPLY 15% DISP | val ~ 1650.0
+FAILED.
+wins: ['test']

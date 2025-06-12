@@ -8,13 +8,13 @@ scp -r murrayla@spartan.hpc.unimelb.edu.au:/data/gpfs/projects/punim1102/liam/P_
 
 
 FROM: (whole group)
-scp -r murrayla@spartan.hpc.unimelb.edu.au:/data/gpfs/projects/punim1102/liam/P_Pub1/_bp/_SPH/_test_1000_20.bp /Users/murrayla/Documents/main_PhD/FEniCSx/FEniCSx/P_Passive_Contraction/_bp/
+scp -r murrayla@spartan.hpc.unimelb.edu.au:/data/gpfs/projects/punim1102/liam/P_Pub1/_bp/ /Users/murrayla/Documents/main_PhD/FEniCSx/FEniCSx/P_Passive_Contraction/_bp/
 
 scp -r /Users/murrayla/Documents/main_PhD/P_MYOANI murrayla@spartan.hpc.unimelb.edu.au:/data/gpfs/projects/punim1102/liam/P_MYOANI
 
 
 SETUP:
-sinteractive -p interactive --time=00:30:00 --cpus-per-task=1 --mem=32G
+sinteractive -p interactive --time=4:00:00 --cpus-per-task=4 --mem=256G
 module purge
 module load Anaconda3/2024.02-1
 eval "$(conda shell.bash hook)"

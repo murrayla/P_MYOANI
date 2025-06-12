@@ -6,7 +6,7 @@
 #SBATCH --partition=sapphire
 
 # The name of the job:
-#SBATCH --job-name="MPI-1-15"
+#SBATCH --job-name="OPTI-1"
 
 # The project ID which this job should run under:
 #SBATCH --account="punim1102"
@@ -29,7 +29,7 @@
 #SBATCH --mail-type=END
 
 # The maximum running time of the job in days-hours:mins:sec
-#SBATCH --time=0-3:00:00
+#SBATCH --time=1-0:00:00
 
 # check that the script is launched with sbatch
 if [ "x$SLURM_JOB_ID" == "x" ]; then
@@ -46,7 +46,7 @@ module load Anaconda3/2024.02-1
 # The job command(s):
 eval "$(conda shell.bash hook)"
 conda activate fenics
-mpirun -n 4 python _feSim.py
+python _matOpti.py 
 
 ##DO NOT ADD/EDIT BEYOND THIS LINE##
 ##Job monitor command to list the resource usage

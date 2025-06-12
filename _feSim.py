@@ -12,7 +12,6 @@ import random
 import numpy as np
 import pandas as pd
 from scipy.spatial import KDTree
-from sklearn.neighbors import NearestNeighbors
 
 # ∆ Dolfin
 import ufl
@@ -39,27 +38,34 @@ CUBE = {"x": 1000, "y": 1000, "z": 100}
 EDGE = [PXLS[d]*CUBE[d] for d in ["x", "y", "z"]]
 
 # ∆ Cauchy
-def cauchy_tensor(u, hlz):
+def cauchy_tensor(u, gcc):
     
     # ∆ Kinematics
     I = ufl.Identity(DIM)  
     F = I + ufl.grad(u)  
     C = ufl.variable(F.T * F)  
-    B = ufl.variable(F * F.T) 
+    E = ufl.variable(0.5*(C-I))
 
-    # ∆ Constitutive 
-    ff = ufl.as_tensor([[1.0, 0.0, 0.0]]) 
-    I4e1 = ufl.inner(ff * C, ff)
-    reg = 1e-6 
-    cond = lambda a: ufl.conditional(a > reg + 1, a, 0)
+    # ∆ Output constants
+    b0, bf, bt = gcc
 
-    # ∆ Cauchy
-    sig = (
-        hlz[0] * ufl.exp(hlz[1] * (ufl.tr(C) - 3)) * B +
-        2 * hlz[2] * cond(I4e1 - 1) * (ufl.exp(hlz[3] * cond(I4e1 - 1) ** 2) - 1) * ufl.outer(ff[0], ff[0])
+    # ∆ Exponential term
+    Q = (
+        bf * E[0,0]**2 + bt * 
+        (
+            E[1,1]**2 + E[2,2]**2 + E[1,2]**2 + E[2,1]**2 + 
+            E[0,1]**2 + E[1,0]**2 + E[0,2]**2 + E[2,0]**2
+        )
     )
 
-    return sig
+    # ∆ Seond Piola-Kirchoff 
+    SPK = b0/4 * ufl.exp(Q) * ufl.as_matrix([
+        [4*bf*E[0,0], 2*bt*(E[1,0] + E[0,1]), 2*bt*(E[2,0] + E[0,2])],
+        [2*bt*(E[0,1] + E[1,0]), 4*bt*E[1,1], 2*bt*(E[2,1] + E[1,2])],
+        [2*bt*(E[0,2] + E[2,0]), 2*bt*(E[1,2] + E[2,1]), 4*bt*E[2,2]],
+    ])
+
+    return 1/ufl.det(F) * F * SPK * F.T
     
 # ∆ Strain
 def green_tensor(u):
@@ -84,7 +90,7 @@ def global_smooth(coords, data):
 
     tol = 1e-8
     # ∆ Set standard deviations
-    sx, sy, sz = 500, 500, 500
+    sx, sy, sz = 1000, 500, 500
 
     # ∆ Nearest neighbour tree
     tree = KDTree(coords)
@@ -223,43 +229,43 @@ def angle_assign(t, coords):
     ele = global_smooth(coords, ele)
     sph = global_smooth(coords, sph)
 
-    # # ∆ Final smoothing 
-    # def final_pass(coords, data):
-    #     tol = 1e-8
-    #     sx, sy, sz = 500, 500, 500
-    #     s_data = np.zeros_like(data)
-    #     for i in range(0, len(coords), 1):
-    #         dx = coords[:, 0] - coords[i, 0]
-    #         dy = coords[:, 1] - coords[i, 1]
-    #         dz = coords[:, 2] - coords[i, 2]
-    #         wei = np.exp(-0.5 * ((dx / sx)**2 + (dy / sy)**2 + (dz / sz)**2))
-    #         wei /= wei.sum() + tol
-    #         s_data[i] = np.sum(wei * data)
-    #     return s_data
-    
-    def final_pass(coords, data, k=10):
-        s_data = np.zeros_like(data, dtype=float)
-        nbrs = NearestNeighbors(n_neighbors=k, algorithm='ball_tree').fit(coords)
-        for i in range(len(coords)):
-            distances, indices = nbrs.kneighbors(coords[i].reshape(1, -1))
-            neighbor_indices = indices[0]
-            s_data[i] = np.mean(data[neighbor_indices])
-        
+    # ∆ Final smoothing 
+    def final_pass(coords, data):
+        tol = 1e-8
+        sx, sy, sz = 500, 500, 500
+        s_data = np.zeros_like(data)
+        for i in range(0, len(coords), 1):
+            dx = coords[:, 0] - coords[i, 0]
+            dy = coords[:, 1] - coords[i, 1]
+            dz = coords[:, 2] - coords[i, 2]
+            wei = np.exp(-0.5 * ((dx / sx)**2 + (dy / sy)**2 + (dz / sz)**2))
+            wei /= wei.sum() + tol
+            s_data[i] = np.sum(wei * data)
         return s_data
     
+    # def final_pass(coords, data, k=10):
+    #     s_data = np.zeros_like(data, dtype=float)
+    #     nbrs = NearestNeighbors(n_neighbors=k, algorithm='ball_tree').fit(coords)
+    #     for i in range(len(coords)):
+    #         distances, indices = nbrs.kneighbors(coords[i].reshape(1, -1))
+    #         neighbor_indices = indices[0]
+    #         s_data[i] = np.mean(data[neighbor_indices])
+        
+    #     return s_data
+    
     # ∆ Simple smoothing
-    azi = final_pass(coords, azi)
-    ele = final_pass(coords, ele)
-    sph = final_pass(coords, sph)
+    # azi = final_pass(coords, azi)
+    # ele = final_pass(coords, ele)
+    # sph = final_pass(coords, sph)
 
     return azi, ele, zs
 
 # ∆ Fenics simulation
-def fx_(t, file, m_ref, hlz, sim, dpm):
+def fx_(t, file, m_ref, gcc, sim, dpm):
 
     # ∆ Begin 't' log
     with open(f"_txt/{sim}.txt", 'a') as simlog:
-        simlog.write(f"test: {t}, hlz: {hlz}\n")
+        simlog.write(f"test: {t}, gcc: {gcc}\n")
 
     # ∆ Load mesh data and set up function spaces
     domain, _, ft = io.gmshio.read_from_msh(filename=file, comm=MPI.COMM_WORLD, rank=0, gdim=DIM)
@@ -271,56 +277,72 @@ def fx_(t, file, m_ref, hlz, sim, dpm):
     # ∆ Define subdomains
     V, _ = Mxs.sub(0).collapse()
 
-    # ∆ Setup functions for assignment
-    x_n, ori, z_data = Function(V), Function(V), Function(V)
-
-    # ∆ Assign angle and z-disc data
+    # ∆ Determine coordinates of space and create mapping tree
+    x_n = Function(V)
     coords = np.array(x_n.function_space.tabulate_dof_coordinates()[:])
-    if t == "test":
-        azi = np.full_like(coords[:, 0], 0.0)
-        ele = np.full_like(coords[:, 0], 0.0)
-        zs = np.full_like(coords[:, 0], 0.0)
-    else:
+    tree = KDTree(coords)
+
+    if t != "test":
+
+        # ∆ Setup functions for assignment
+        ori, z_data = Function(V), Function(V)
+
+        # ∆ Assign angle and z-disc data
         azi, ele, zs = angle_assign(t, coords)
 
-    # ∆ Store angles
-    CA, CE = np.cos(azi), np.cos(ele)
-    SA, SE = np.sin(azi), np.sin(ele)
+        # ∆ Store angles
+        CA, CE = np.cos(azi), np.cos(ele)
+        SA, SE = np.sin(azi), np.sin(ele)
 
-    print(np.where(CA*CE<0))
+        # ∆ Create interpolate functions
+        # µ Basis vector 1
+        def nu_1(phi_xyz):
+            _, idx = tree.query(phi_xyz.T, k=1)
+            return np.array([CA[idx]*CE[idx], SA[idx]*CE[idx], -SE[idx]])
+        # µ Basis vector 2
+        def nu_2(phi_xyz):
+            _, idx = tree.query(phi_xyz.T, k=1)
+            return np.array([-SA[idx], CA[idx], np.zeros_like(CA[idx])])
+        # µ Basis vector 3
+        def nu_3(phi_xyz):
+            _, idx = tree.query(phi_xyz.T, k=1)
+            return np.array([CA[idx]*SE[idx], SA[idx]*SE[idx], CE[idx]])
 
-    # ∆ Create z_disc id data
-    z_arr = z_data.x.array.reshape(-1, 3)
-    z_arr[:, 0], z_arr[:, 1], z_arr[:, 2] = zs, azi, ele
-    z_data.x.array[:] = z_arr.reshape(-1)
+        # ∆ Create z_disc id data
+        z_arr = z_data.x.array.reshape(-1, 3)
+        z_arr[:, 0], z_arr[:, 1], z_arr[:, 2] = zs, azi, ele
+        z_data.x.array[:] = z_arr.reshape(-1)
 
-    # ∆ Create angular orientation vector
-    ori_arr = ori.x.array.reshape(-1, 3)
-    ori_arr[:, 0], ori_arr[:, 1], ori_arr[:, 2] = CA*CE, SA*CE, -SE
-    ori.x.array[:] = ori_arr.reshape(-1)
+        # ∆ Create angular orientation vector
+        ori.interpolate(nu_1)
 
-    # ∆ Create mapping between data {adpated from stackexchange}
-    def dof_map(V_von, V_to):
-        coor_to = V_to.tabulate_dof_coordinates()
-        coor_von = V_von.tabulate_dof_coordinates()
-        tree = KDTree(coor_to)
-        _, mapping = tree.query(coor_von, k=1)
-        return mapping
+        # ∆ Save foundations data
+        z_data.name = "Node Mapping"
+        ori.name = "Orientation Vectors"
+        with io.VTXWriter(MPI.COMM_WORLD, f"_bp/_{t}/_ZSN.bp", z_data, engine="BP4") as fz:
+            fz.write(0)
+            fz.close()
+        with io.VTXWriter(MPI.COMM_WORLD, f"_bp/_{t}/_ORI.bp", ori, engine="BP4") as fo:
+            fo.write(0)
+            fo.close()
 
-    # ∆ Create push tensor function
-    Push = Function(Tes)
-    # µ Determine mapping
-    new_dof = dof_map(Tes, V)
-    # µ Reshape array for assignment
-    p_arr = Push.x.array
-    n_nodes = len(p_arr) // DIM**2
-    r_push = p_arr.reshape((n_nodes, DIM**2))
+        # ∆ Create push tensor function
+        Push = Function(Tes)
 
-    # ∆ Assign data to each position
-    r_push[:, 0], r_push[:, 1], r_push[:, 2] = (CA*CE)[new_dof], (-SA)[new_dof], (CA*SE)[new_dof]
-    r_push[:, 3], r_push[:, 4], r_push[:, 5] = (SA*CE)[new_dof], (CA)[new_dof], (SA*SE)[new_dof]
-    r_push[:, 6], r_push[:, 7], r_push[:, 8] = (-SE)[new_dof], (np.zeros_like(CA))[new_dof], (CE)[new_dof]
-    Push.x.array[:] = p_arr.reshape(-1)
+        # ∆ Define push interpolation
+        def forward(phi_xyz):
+            _, idx = tree.query(phi_xyz.T, k=1)
+            f00, f01, f02 = CA[idx]*CE[idx], -SA[idx], CA[idx]*SE[idx]
+            f10, f11, f12 = SA[idx]*CE[idx], CA[idx], SA[idx]*SE[idx]
+            f20, f21, f22 = -SE[idx], np.zeros_like(CE[idx]), CE[idx]
+            return np.array([f00, f01, f02, f10, f11, f12, f20, f21, f22])
+
+        # ∆ Interpolate Push as Forward transform
+        Push.interpolate(forward)
+
+    else:
+        # ∆ Push as Forward transform
+        Push = ufl.Identity(DIM)
 
     # ∆ Load key function variables
     mx = Function(Mxs)
@@ -333,100 +355,55 @@ def fx_(t, file, m_ref, hlz, sim, dpm):
     I = ufl.Identity(DIM)  
     F = ufl.variable(I + ufl.grad(u_nu))
 
-    # ∆ Metric tensors
-    # µ [UNDERFORMED] Covariant basis vectors 
-    A1, A2, A3 = Function(V), Function(V), Function(V)
-    # ¬ create base 1
-    A1_arr = A1.x.array.reshape(-1, 3)
-    A1_arr[:, 0], A1_arr[:, 1], A1_arr[:, 2] = CA*CE, SA*CE, -SE
-    A1.x.array[:] = A1_arr.reshape(-1)
-    # ¬ create base 2
-    A2_arr = A2.x.array.reshape(-1, 3)
-    A2_arr[:, 0], A2_arr[:, 1], A2_arr[:, 2] = -SA, CA, 0
-    A2.x.array[:] = A2_arr.reshape(-1)
-    # ¬ create base 3
-    A3_arr = A3.x.array.reshape(-1, 3)
-    A3_arr[:, 0], A3_arr[:, 1], A3_arr[:, 2] = CA*SE, SA*SE, CE
-    A3.x.array[:] = A3_arr.reshape(-1)
-    # µ [UNDERFORMED] Metric tensors
-    G_v = ufl.as_tensor([
-        [ufl.dot(A1, A1), ufl.dot(A1, A2), ufl.dot(A1, A3)],
-        [ufl.dot(A2, A1), ufl.dot(A2, A2), ufl.dot(A2, A3)],
-        [ufl.dot(A3, A1), ufl.dot(A3, A2), ufl.dot(A3, A3)]
-    ]) 
-    G_v_inv = ufl.inv(G_v)  
-    # µ [DEFORMED] Metric covariant tensors
-    g_v = ufl.as_tensor([
-        [ufl.dot(F * A1, F * A1), ufl.dot(F * A1, F * A2), ufl.dot(F * A1, F * A3)],
-        [ufl.dot(F * A2, F * A1), ufl.dot(F * A2, F * A2), ufl.dot(F * A2, F * A3)],
-        [ufl.dot(F * A3, F * A1), ufl.dot(F * A3, F * A2), ufl.dot(F * A3, F * A3)]
-    ])
-    g_v_inv = ufl.inv(g_v)
+    if t != "test":
 
-    # ∆ Christoffel symbols 
-    Gamma = ufl.as_tensor(
-        0.5 * G_v_inv[k, l] * (ufl.grad(G_v[j, l])[i] + ufl.grad(G_v[i, l])[j] - ufl.grad(G_v[i, j])[l]),
-        (i, j, k)
-    )
-    # Gamma = ufl.Identity(DIM)
+        # ∆ Metric tensors
+        # µ [UNDERFORMED] Covariant basis vectors 
+        A1, A2, A3 = Function(V), Function(V), Function(V)
+        # ¬ create base 1
+        A1.interpolate(nu_1)
+        # ¬ create base 2
+        A2.interpolate(nu_2)
+        # ¬ create base 3
+        A3.interpolate(nu_3)
+        
+        # µ [UNDERFORMED] Metric tensors
+        G_v = ufl.as_tensor([
+            [ufl.dot(A1, A1), ufl.dot(A1, A2), ufl.dot(A1, A3)],
+            [ufl.dot(A1, A2), ufl.dot(A2, A2), ufl.dot(A2, A3)],
+            [ufl.dot(A1, A3), ufl.dot(A2, A3), ufl.dot(A3, A3)]
+        ]) 
+        G_v_inv = ufl.inv(G_v)  
+        # µ [DEFORMED] Metric covariant tensors
+        g_v = ufl.as_tensor([
+            [ufl.dot(F * A1, F * A1), ufl.dot(F * A1, F * A2), ufl.dot(F * A1, F * A3)],
+            [ufl.dot(F * A2, F * A1), ufl.dot(F * A2, F * A2), ufl.dot(F * A2, F * A3)],
+            [ufl.dot(F * A3, F * A1), ufl.dot(F * A3, F * A2), ufl.dot(F * A3, F * A3)]
+        ])
 
-    # ∆ Covariant derivative
-    covDev = ufl.as_tensor(ufl.grad(v)[i, j] + Gamma[i, k, j] * v[k], (i, j))
-    # covDev = ufl.as_tensor(ufl.grad(v)[i, j], (i, j))
+        # ∆ Christoffel symbols 
+        Gamma = ufl.as_tensor(
+            0.5 * G_v_inv[k, l] * (ufl.grad(G_v[j, l])[i] + ufl.grad(G_v[i, l])[j] - ufl.grad(G_v[i, j])[l]),
+            (i, j, k)
+        )
+
+        # ∆ Covariant derivative
+        covDev = ufl.as_tensor(ufl.grad(v)[i, j] + Gamma[i, k, j] * v[k], (i, j))
+
+    else:
+        # ∆ Covariant derivative
+        covDev = ufl.as_tensor(ufl.grad(v)[i, j], (i, j))
 
     # ∆ Kinematics Tensors
     C = ufl.variable(F.T * F)  
     B = ufl.variable(F * F.T)  
-    E = ufl.as_tensor(0.5 * (g_v - G_v))   
+    if t != "test":
+        E = ufl.as_tensor(0.5 * (g_v - G_v))   
+    else:
+        E = ufl.as_tensor(0.5 * (C - I))
     J = ufl.det(F)   
 
-    # # ∆ Constitutive setup
-    I1 = ufl.tr(C)
-    # e1 = ufl.as_tensor([1, 0, 0])
-    e1 = A1
-    # I4f = ufl.inner(C * e1, e1)
-    I4f = ufl.inner(C * A1, A1)
-    # e2 = ufl.as_tensor([[0, 1, 0]])
-    # I4t = ufl.inner(e2 * C, e2)
-    cond = lambda a: ufl.conditional(a > 0, a, 0)
-
-    # a0, b0, af, bf, at, bt = hlz
-
-    # phi = (
-    #     a0 / (2 * b0) * ufl.exp(b0 * (I1 - 3)) + 
-    #     af / (2 * bf) * (ufl.exp(bf * cond(I4f - 1)**2) - 1) + 
-    #     at / (2 * bt) * (ufl.exp(bt * cond(I4t - 1)**2) - 1) 
-    # )
-
-
-
-    # a0, b0, af, bf = hlz
-
-    # phi = (
-    #     a0 / (2 * b0) * ufl.exp(b0 * (I1 - 3)) + 
-    #     af / (2 * bf) * (ufl.exp(bf * cond(I4f - 1)**2) - 1)
-    # )
-
-    # s_piola = J * ufl.inv(F) * ufl.diff(phi, F) * ufl.inv(F.T) + J * ufl.inv(F) * p * ufl.inv(G_v) * ufl.inv(F.T)
-
-    # # ∆ Sigma
-    # hlz_sig = (
-    #     a0 * ufl.exp(b0 * (I1 - 3)) * B +
-    #     2 * af * cond(I4f - 1) * (ufl.exp(bf * cond(I4f - 1) ** 2) - 1) * ufl.outer(e1[0], e1[0]) +
-    #     2 * at * cond(I4t - 1) * (ufl.exp(bt * cond(I4t - 1) ** 2) - 1) * ufl.outer(e2[0], e2[0])
-    # )
-
-    # a0, b0, af, bf = hlz
-
-    # hlz_sig = ( 
-    #     a0 * ufl.exp(b0 * (I1 - 3)) * B +
-    #     2 * af * cond(I4f - 1) * (ufl.exp(bf * cond(I4f - 1) ** 2) - 1) * ufl.outer(A1, A1)
-    # )
-
-    # # ∆ Second Piola-Kirchoff with Pressure term
-    # s_piola = J * ufl.inv(F) * hlz_sig * ufl.inv(F.T) + J * ufl.inv(F) * p * ufl.inv(G_v) * ufl.inv(F.T)
-
-    gcc = [1,1,1]
+    # ∆ Extract Constitutive terms
     b0, bf, bt = gcc
 
     # ∆ Exponent term
@@ -437,15 +414,24 @@ def fx_(t, file, m_ref, hlz, sim, dpm):
             E[0,1]**2 + E[1,0]**2 + E[0,2]**2 + E[2,0]**2
         )
     )
-    s_piola = b0/4 * ufl.exp(Q) * ufl.as_matrix([
-        [4*bf*E[0,0], 2*bt*(E[1,0] + E[0,1]), 2*bt*(E[2,0] + E[0,2])],
-        [2*bt*(E[0,1] + E[1,0]), 4*bt*E[1,1], 2*bt*(E[2,1] + E[1,2])],
-        [2*bt*(E[0,2] + E[2,0]), 2*bt*(E[1,2] + E[2,1]), 4*bt*E[2,2]],
-    ]) - p * G_v_inv
+
+    # ∆ Seond Piola-Kirchoff 
+    if t != "test":
+        SPK = b0/4 * ufl.exp(Q) * ufl.as_matrix([
+            [4*bf*E[0,0], 2*bt*(E[1,0] + E[0,1]), 2*bt*(E[2,0] + E[0,2])],
+            [2*bt*(E[0,1] + E[1,0]), 4*bt*E[1,1], 2*bt*(E[2,1] + E[1,2])],
+            [2*bt*(E[0,2] + E[2,0]), 2*bt*(E[1,2] + E[2,1]), 4*bt*E[2,2]],
+        ]) - p * G_v_inv
+    else:
+        SPK = b0/4 * ufl.exp(Q) * ufl.as_matrix([
+            [4*bf*E[0,0], 2*bt*(E[1,0] + E[0,1]), 2*bt*(E[2,0] + E[0,2])],
+            [2*bt*(E[0,1] + E[1,0]), 4*bt*E[1,1], 2*bt*(E[2,1] + E[1,2])],
+            [2*bt*(E[0,2] + E[2,0]), 2*bt*(E[1,2] + E[2,1]), 4*bt*E[2,2]],
+        ]) - p * I
 
     # ∆ Residual
     dx = ufl.Measure(integral_type="dx", domain=domain, metadata={"quadrature_degree": QUADRATURE})
-    R = ufl.as_tensor(s_piola[a, b] * F[j, b] * covDev[j, a]) * dx + q * (J - 1) * dx
+    R = ufl.as_tensor(SPK[a, b] * F[j, b] * covDev[j, a]) * dx + q * (J - 1) * dx
 
     log.set_log_level(log.LogLevel.INFO)
 
@@ -489,6 +475,7 @@ def fx_(t, file, m_ref, hlz, sim, dpm):
     solver = NewtonSolver(domain.comm, problem)
     solver.atol = TOL
     solver.rtol = TOL
+    solver.max_it = 20
     solver.convergence_criterion = "incremental"
 
     # ∆ Solve
@@ -507,7 +494,7 @@ def fx_(t, file, m_ref, hlz, sim, dpm):
     dis.interpolate(u_eval)
     # µ Evaluate stress
     cauchy = Expression(
-        e=cauchy_tensor(u_eval, hlz), 
+        e=cauchy_tensor(u_eval, gcc), 
         X=Tes.element.interpolation_points()
     )
     # µ Evaluate strain
@@ -526,29 +513,30 @@ def fx_(t, file, m_ref, hlz, sim, dpm):
 
     # ∆ Store data
     coords = np.array(x_n.function_space.tabulate_dof_coordinates()[:])
-    df = pd.DataFrame(
-        data={
-            "X": coords[:, 0], "Y": coords[:, 1], "Z": coords[:, 2],
-            "sig_xx": r_sig[:, 0], "sig_yy": r_sig[:, 4], "sig_zz": r_sig[:, 8],
-            "sig_xy": r_sig[:, 1], "sig_xz": r_sig[:, 2], "sig_yz": r_sig[:, 5],
-            "eps_xx": r_eps[:, 0], "eps_yy": r_eps[:, 4], "eps_zz": r_eps[:, 8],
-            "eps_xy": r_eps[:, 1], "eps_xz": r_eps[:, 2], "eps_yz": r_eps[:, 5],
-            "Azimuth": azi, "Elevation": ele,
-        }
-    )
+    if t != "test":
+        df = pd.DataFrame(
+            data={
+                "X": coords[:, 0], "Y": coords[:, 1], "Z": coords[:, 2],
+                "sig_xx": r_sig[:, 0], "sig_yy": r_sig[:, 4], "sig_zz": r_sig[:, 8],
+                "sig_xy": r_sig[:, 1], "sig_xz": r_sig[:, 2], "sig_yz": r_sig[:, 5],
+                "eps_xx": r_eps[:, 0], "eps_yy": r_eps[:, 4], "eps_zz": r_eps[:, 8],
+                "eps_xy": r_eps[:, 1], "eps_xz": r_eps[:, 2], "eps_yz": r_eps[:, 5],
+                "Azimuth": azi, "Elevation": ele,
+            }
+        )
+    else:
+        df = pd.DataFrame(
+            data={
+                "X": coords[:, 0], "Y": coords[:, 1], "Z": coords[:, 2],
+                "sig_xx": r_sig[:, 0], "sig_yy": r_sig[:, 4], "sig_zz": r_sig[:, 8],
+                "sig_xy": r_sig[:, 1], "sig_xz": r_sig[:, 2], "sig_yz": r_sig[:, 5],
+                "eps_xx": r_eps[:, 0], "eps_yy": r_eps[:, 4], "eps_zz": r_eps[:, 8],
+                "eps_xy": r_eps[:, 1], "eps_xz": r_eps[:, 2], "eps_yz": r_eps[:, 5]
+            }
+        )
 
     # ∆ Save CSV
     df.to_csv(f"_csv/{t}_{dpm}.csv")  
-
-    # ∆ Save foundations data
-    z_data.name = "Node Mapping"
-    ori.name = "Orientation Vectors"
-    with io.VTXWriter(MPI.COMM_WORLD, f"_bp/_{t}/_ZSN.bp", z_data, engine="BP4") as fz:
-        fz.write(0)
-        fz.close()
-    with io.VTXWriter(MPI.COMM_WORLD, f"_bp/_{t}/_ORI.bp", ori, engine="BP4") as fo:
-        fo.write(0)
-        fo.close()
 
     # ∆ Write files
     dis_file.write(0)
@@ -575,22 +563,13 @@ def main(tests, m_ref, sim, dpm):
 
         print("\t" + " ~> Test: {}".format(t))
         # ∆ Load constitutive values
-        hlz_df = pd.read_csv("_csv/hlz_.csv")
-        # hlz = [hlz_df.iloc[28]["a"], hlz_df.iloc[28]["b"], hlz_df.iloc[28]["af"], hlz_df.iloc[28]["bf"]]
-        # hlz = [0.487915124, 10.6667657, 1.18114412, 36.19571065]z
-        # hlz = [0.01,1,2,1.5]
-        hlz = [0.059, 8.023, 18.472, 16.026]
-        # hlz = [0.057, 8.094, 21.503, 15.819, 6.841, 6.959]
-        # hlz = [0.1, 0.001, 1, 1]
-        # hlz = [.25, .5, .1, .1]
-        # hlz = [1,1,1,1]
-        # hlz = [5.70, 11.67, 19.83, 24.72]
+        gcc = [1, 14, 10]
          
         # ∆ Mesh file
         file = f"_msh/em_{m_ref}.msh"
 
         # ∆ Simulation 
-        _, win = fx_(t, file, m_ref, hlz, sim, dpm)
+        _, win = fx_(t, file, m_ref, gcc, sim, dpm)
         if win: wins.append(t)
 
     # ∆ Append win dataz
@@ -602,12 +581,9 @@ def main(tests, m_ref, sim, dpm):
 if __name__ == '__main__':
 
     # ∆ Indicate test cases
-    # tests = ["0"]
     # tests = ["test"] + [x for x in [str(y) for y in range(0, 17, 1)]]
-    # tests = ["test"] + [x for x in [str(y) for y in range(0, 5, 1)]]
-    # tests = ["4"]
-    tests = ["0", "4"]
+    tests = ["test"]
     m_ref = 1
-    dpm = 15
+    dpm = 20
     sim = "N" + str(dpm)
     main(tests, m_ref, sim, dpm)

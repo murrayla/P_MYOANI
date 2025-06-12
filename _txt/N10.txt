@@ -1,5 +1,6 @@
-tests: ['0']
-m_ref: 1
-test: 0, hlz: [0.059, 8.023, 18.472, 16.026]
-test: 0, hlz: [0.059, 8.023, 18.472, 16.026]
-test: 0, hlz: [0.059, 8.023, 18.472, 16.026]
+tests: ['test']
+m_ref: 900
+test: test, gcc: [0.8, 18, 8]
+APPLY 10% DISP | val ~ 1100.0
+SOLVED i_{12}% IN:5, True
+wins: ['test']
