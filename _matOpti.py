@@ -39,7 +39,7 @@ CUBE = {"x": 1000, "y": 1000, "z": 100}
 EDGE = [PXLS[d]*CUBE[d] for d in ["x", "y", "z"]]
     
 # ∆ Cauchy
-def cauchy_tensor(u, gcc):
+def cauchy_tensor(u, p, gcc):
     
     # ∆ Kinematics
     I = ufl.Identity(DIM)  
@@ -66,7 +66,7 @@ def cauchy_tensor(u, gcc):
         [2*bt*(E[0,2] + E[2,0]), 2*bt*(E[1,2] + E[2,1]), 4*bt*E[2,2]],
     ])
 
-    return 1/ufl.det(F) * F * SPK * F.T
+    return 1/ufl.det(F) * F * SPK * F.T -  1/ufl.det(F) * F * p * F.T
     
 # ∆ Run simulation
 def run_simulation(gcc, env):
@@ -145,8 +145,8 @@ def run_simulation(gcc, env):
 
     # ∆ Iterate strain
     sig_xx_mean = []
+    sigs = []
     sig = Function(Tes)
-    inx, iny, inz = 0.05 * EDGE[0], 0.05 * EDGE[1], 0.05 * EDGE[2]
 
     for dmp in [0, 20]:
         # ∆ Apply displacements as boundary conditions
@@ -164,13 +164,13 @@ def run_simulation(gcc, env):
         solver = NewtonSolver(domain.comm, problem)
         solver.atol = TOL
         solver.rtol = TOL
-        solver.max_it = 50
+        solver.max_it = 20
         solver.convergence_criterion = "incremental"
 
         # ∆ Solve
+        print(gcc)
         try:
             num_its, _ = solver.solve(mx)
-            print(gcc)
             print("\t" * depth + " ... converged in {} its".format(num_its))
         except:
             return None
@@ -180,7 +180,7 @@ def run_simulation(gcc, env):
         p_eval = mx.sub(1).collapse()
         # µ Evaluate stress
         cauchy = Expression(
-            e=cauchy_tensor(u_eval, gcc), 
+            e=cauchy_tensor(u_eval, p_eval, gcc), 
             X=Tes.element.interpolation_points()
         )
         sig.interpolate(cauchy)
@@ -200,14 +200,33 @@ def run_simulation(gcc, env):
                 "sig_xy": r_sig[:, 1], "sig_xz": r_sig[:, 2], "sig_yz": r_sig[:, 5]
             }
         )
-        df = df[(
-            (df["X"] >= inx) & (df["X"] <= EDGE[0] - inx) & 
-            (df["Y"] >= iny) & (df["Y"] <= EDGE[1] - iny) & 
-            (df["Z"] >= inz) & (df["Z"] <= EDGE[2] - inz) 
+
+        # ∆ Determine points within the 3D space
+        # µ 0 - corner ymax
+        xx = np.linspace(500, EDGE[0] - 500, 5)
+        yy = np.linspace(500, EDGE[1] - 500, 5)
+        zz = np.linspace(500, EDGE[2] - 500, 5)
+        sig_c = []
+        for (xp, yp, zp) in zip(xx, yy, zz):
+            df_p = df[(
+                (df["X"] >= xp - 300) & (df["X"] <= xp + 300) & 
+                (df["Y"] >= yp - 300) & (df["Y"] <= yp + 300) & 
+                (df["Z"] >= zp - 300) & (df["Z"] <= zp + 300) 
+            )]
+            sig_c.append(df_p.loc[:, 'sig_xx'].mean())
+
+        peak_df = df[(
+            (df["X"] >= EDGE[0] - 400) & 
+            (df["Y"] >= 500) & (df["Y"] <= EDGE[1] - 500) & 
+            (df["Z"] >= 100) & (df["Z"] <= EDGE[2] - 100) 
         )]
+        peak = (peak_df.loc[:, 'sig_xx'].mean()**2 + peak_df.loc[:, 'sig_xy'].mean()**2 + peak_df.loc[:, 'sig_xz'].mean()**2)**0.5
+        
 
         # ∆ Retain mean value
-        sig_xx_mean.append(df.loc[:, 'sig_xx'].mean())
+        sig_xx_mean.append(peak)
+        sigs.append(sig_c)
+        print(peak)
 
     # ∆ Update text files on progress 
     # µ Mean data
@@ -270,8 +289,8 @@ if __name__ == '__main__':
 
     # ∆ Experimental data to converge to
     eps_exp = np.array([0.0, 0.20])
-    sig_exp = np.array([0.0, 60])
-    bounds = [(0.001, 50), (0.001, 50), (0.001, 50)]
+    sig_exp = np.array([0.0, 50])
+    bounds = [(0.01, 5), (0.001, 50), (0.001, 50)]
     init_gcc = [1, 14, 10]
 
     # ∆ Setup

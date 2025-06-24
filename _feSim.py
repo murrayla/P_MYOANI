@@ -38,11 +38,13 @@ CUBE = {"x": 1000, "y": 1000, "z": 100}
 EDGE = [PXLS[d]*CUBE[d] for d in ["x", "y", "z"]]
 
 # ∆ Cauchy
-def cauchy_tensor(u, gcc):
+def cauchy_tensor(u, p, Push, gcc):
     
+    u_nu = Push * u
+
     # ∆ Kinematics
     I = ufl.Identity(DIM)  
-    F = I + ufl.grad(u)  
+    F = I + ufl.grad(u_nu)  
     C = ufl.variable(F.T * F)  
     E = ufl.variable(0.5*(C-I))
 
@@ -63,27 +65,9 @@ def cauchy_tensor(u, gcc):
         [4*bf*E[0,0], 2*bt*(E[1,0] + E[0,1]), 2*bt*(E[2,0] + E[0,2])],
         [2*bt*(E[0,1] + E[1,0]), 4*bt*E[1,1], 2*bt*(E[2,1] + E[1,2])],
         [2*bt*(E[0,2] + E[2,0]), 2*bt*(E[1,2] + E[2,1]), 4*bt*E[2,2]],
-    ])
+    ]) 
 
-    return 1/ufl.det(F) * F * SPK * F.T
-    
-# ∆ Strain
-def green_tensor(u):
-
-    # ∆ Kinematics
-    I = ufl.variable(ufl.Identity(DIM))
-    F = ufl.variable(I + ufl.grad(u))
-    C = ufl.variable(F.T * F)
-    E = ufl.variable(0.5*(C-I))
-
-    # ∆ Large strain
-    eps = ufl.as_tensor([
-        [E[0, 0], E[0, 1], E[0, 2]], 
-        [E[1, 0], E[1, 1], E[1, 2]], 
-        [E[2, 0], E[2, 1], E[2, 2]]
-    ])
-
-    return eps
+    return 1/ufl.det(F) * F * SPK * F.T -  1/ufl.det(F) * F * p * F.T
 
 # ∆ Smooth data globally
 def global_smooth(coords, data):
@@ -254,9 +238,9 @@ def angle_assign(t, coords):
     #     return s_data
     
     # ∆ Simple smoothing
-    # azi = final_pass(coords, azi)
-    # ele = final_pass(coords, ele)
-    # sph = final_pass(coords, sph)
+    azi = final_pass(coords, azi)
+    ele = final_pass(coords, ele)
+    sph = final_pass(coords, sph)
 
     return azi, ele, zs
 
@@ -276,6 +260,7 @@ def fx_(t, file, m_ref, gcc, sim, dpm):
 
     # ∆ Define subdomains
     V, _ = Mxs.sub(0).collapse()
+    P, _ = Mxs.sub(1).collapse()
 
     # ∆ Determine coordinates of space and create mapping tree
     x_n = Function(V)
@@ -436,12 +421,14 @@ def fx_(t, file, m_ref, gcc, sim, dpm):
     log.set_log_level(log.LogLevel.INFO)
 
     # ∆ Data store
-    dis = Function(V) 
+    dis, pre = Function(V), Function(P) 
     sig, eps = Function(Tes), Function(Tes)
     dis.name = "U - Displacement"
+    pre.name = "P - Pressure"
     eps.name = "E - Green Strain"
     sig.name = "S - Cauchy Stress"
     dis_file = io.VTXWriter(MPI.COMM_WORLD, f"_bp/_{t}/_DISP.bp", dis, engine="BP4")
+    pre_file = io.VTXWriter(MPI.COMM_WORLD, f"_bp/_{t}/_PRE.bp", pre, engine="BP4")
     sig_file = io.VTXWriter(MPI.COMM_WORLD, f"_bp/_{t}/_SIG.bp", sig, engine="BP4")
     eps_file = io.VTXWriter(MPI.COMM_WORLD, f"_bp/_{t}/_EPS.bp", eps, engine="BP4")
 
@@ -458,8 +445,8 @@ def fx_(t, file, m_ref, gcc, sim, dpm):
     # ∆ Apply displacements as boundary conditions
     du = CUBE["x"] * PXLS["x"] * (dpm / 100)
     print(f"APPLY {dpm}% DISP | val ~ {np.round(du,2)}")
-    d_xy0 = dirichletbc(default_scalar_type(du//2), xx0, Mxs.sub(0).sub(X))
-    d_xy1 = dirichletbc(default_scalar_type(-du//2), xx1, Mxs.sub(0).sub(X))
+    d_xy0 = dirichletbc(default_scalar_type(du), xx0, Mxs.sub(0).sub(X))
+    d_xy1 = dirichletbc(default_scalar_type(0.0), xx1, Mxs.sub(0).sub(X))
     d_yy0 = dirichletbc(default_scalar_type(0.0), yx0, Mxs.sub(0).sub(Y))
     d_yy1 = dirichletbc(default_scalar_type(0.0), yx1, Mxs.sub(0).sub(Y))
     d_zy0 = dirichletbc(default_scalar_type(0.0), zx0, Mxs.sub(0).sub(Z))
@@ -475,15 +462,15 @@ def fx_(t, file, m_ref, gcc, sim, dpm):
     solver = NewtonSolver(domain.comm, problem)
     solver.atol = TOL
     solver.rtol = TOL
-    solver.max_it = 20
+    solver.max_it = 15
     solver.convergence_criterion = "incremental"
 
     # ∆ Solve
     try: 
         num_its, res = solver.solve(mx)
-        print(f"SOLVED {k}% IN:{num_its}, {res}")
+        print(f"SOLVED {dpm}% IN:{num_its}, {res}")
         with open(f"_txt/{sim}.txt", 'a') as simlog:
-            simlog.write(f"SOLVED {k}% IN:{num_its}, {res}\n")
+            simlog.write(f"SOLVED {dpm}% IN:{num_its}, {res}\n")
     except:
         with open(f"_txt/{sim}.txt", 'a') as simlog:
             simlog.write(f"FAILED.\n")
@@ -491,17 +478,16 @@ def fx_(t, file, m_ref, gcc, sim, dpm):
     
     # ∆ Evaluation
     u_eval = mx.sub(0).collapse()
+    p_eval = mx.sub(1).collapse()
     dis.interpolate(u_eval)
+    pre.interpolate(p_eval)
     # µ Evaluate stress
     cauchy = Expression(
-        e=cauchy_tensor(u_eval, gcc), 
+        e=cauchy_tensor(u_eval, p_eval, Push, gcc), 
         X=Tes.element.interpolation_points()
     )
     # µ Evaluate strain
-    green = Expression(
-        e=green_tensor(u_eval), 
-        X=Tes.element.interpolation_points()
-    )
+    green = Expression(e=E, X=Tes.element.interpolation_points())
     sig.interpolate(cauchy)
     eps.interpolate(green)
     
@@ -512,6 +498,7 @@ def fx_(t, file, m_ref, gcc, sim, dpm):
     r_eps = eps_arr.reshape((n_nodes, DIM**2))
 
     # ∆ Store data
+    sigs = []
     coords = np.array(x_n.function_space.tabulate_dof_coordinates()[:])
     if t != "test":
         df = pd.DataFrame(
@@ -535,16 +522,52 @@ def fx_(t, file, m_ref, gcc, sim, dpm):
             }
         )
 
+    # ∆ Determine points within the 3D space
+    # µ 0 - corner ymax
+    xx = np.linspace(500, EDGE[0] - 500, 5)
+    yy = np.linspace(500, EDGE[1] - 500, 5)
+    zz = np.linspace(500, EDGE[2] - 500, 5)
+    sig_c = []
+    for (xp, yp, zp) in zip(xx, yy, zz):
+        df_p = df[(
+            (df["X"] >= xp - 400) & (df["X"] <= xp + 400) & 
+            (df["Y"] >= yp - 400) & (df["Y"] <= yp + 400) & 
+            (df["Z"] >= zp - 400) & (df["Z"] <= zp + 400) 
+        )]
+        sig_c.append(df_p.loc[:, 'sig_xx'].mean())
+
+    # ∆ Retain mean value
+    sigs.append(sig_c)
+    
+    peak_df = df[(
+        (df["X"] >= EDGE[0] - 400) & 
+        (df["Y"] >= 500) & (df["Y"] <= EDGE[1] - 500) & 
+        (df["Z"] >= 100) & (df["Z"] <= EDGE[2] - 100) 
+    )]
+    peak = (peak_df.loc[:, 'sig_xx'].mean()**2 + peak_df.loc[:, 'sig_xy'].mean()**2 + peak_df.loc[:, 'sig_xz'].mean()**2)**0.5
+    
+    
+    # print(sig_c)
+    print(peak)
+    print(sigs)
+
+    with open(f"_txt/ref_tests.txt", 'a') as simlog:
+        simlog.write(f"test passed @ {dpm}%")
+        simlog.write(f"peak: {peak}\n")
+        simlog.write(f"sigs: {sigs}\n")
+    
     # ∆ Save CSV
     df.to_csv(f"_csv/{t}_{dpm}.csv")  
 
     # ∆ Write files
     dis_file.write(0)
+    pre_file.write(0)
     sig_file.write(0)
     eps_file.write(0)
 
     # ∆ Close files
     dis_file.close()
+    pre_file.close()
     sig_file.close()
     eps_file.close()
 
@@ -563,7 +586,10 @@ def main(tests, m_ref, sim, dpm):
 
         print("\t" + " ~> Test: {}".format(t))
         # ∆ Load constitutive values
-        gcc = [1, 14, 10]
+        # gcc = [4, 10, 14]
+        # gcc = [2.63, 23.22, 16.75] #23.42
+        gcc = [1, 11, 10]
+        # gcc = [4.667357969363915,  9.171759219672838,  49.651646465638066]
          
         # ∆ Mesh file
         file = f"_msh/em_{m_ref}.msh"
@@ -582,8 +608,16 @@ if __name__ == '__main__':
 
     # ∆ Indicate test cases
     # tests = ["test"] + [x for x in [str(y) for y in range(0, 17, 1)]]
-    tests = ["test"]
-    m_ref = 1
-    dpm = 20
-    sim = "N" + str(dpm)
-    main(tests, m_ref, sim, dpm)
+    # ∆ Open log file
+    with open(f"_txt/ref_tests.txt", 'w') as simlog:
+        simlog.write(f"TESTING REFERENCE LEVELS\n")
+
+    refs = [x for x in range(200, 3100, 100)]
+    refs = refs[::-1]
+    for r in refs:
+        with open(f"_txt/ref_tests.txt", 'a') as simlog:
+            simlog.write(f"test: {r}\n")
+        tests = ["test"]
+        dpm = 15
+        sim = "N" + str(dpm)
+        main(tests, r, sim, dpm)

@@ -64,7 +64,7 @@ def reg_images(raw_np, seg_np):
     ids = iso_df["ID"].to_list()
 
     # ∆ Iterate layers
-    for l in [60]:
+    for l in [250]:
 
         # ∆ Rotate data
         r_raw_np = ndimage.rotate(raw_np[:, :, l], -45, reshape=True, order=1, cval=np.mean(raw_np[:, :, l]))
@@ -86,7 +86,32 @@ def reg_images(raw_np, seg_np):
         plt.xlim(X_BOUNDS[0], X_BOUNDS[1])
         plt.axis('off')
         plt.imshow(r_raw_np, cmap="gray", origin='lower')
-        plt.savefig(f"_png/ralreg_60.png", bbox_inches='tight', pad_inches=0.2, dpi=1000)
+        plt.savefig(f"_png/ralreg_250.png", bbox_inches='tight', pad_inches=0.2, dpi=1000)
+        plt.close()
+
+    for l in [150]:
+
+        # ∆ Rotate data
+        r_raw_np = ndimage.rotate(raw_np[:, :, l], -45, reshape=True, order=1, cval=np.mean(raw_np[:, :, l]))
+        # r_seg_np = ndimage.rotate(seg_np[:, :, l], -45, reshape=True, order=1)
+
+        # ∆ Permute data
+        # for n in ids:
+        #     r_raw_np[r_seg_np > 0] = 255
+        # r_raw_np[:Y_BOUNDS[0], :] = 255
+        # r_raw_np[Y_BOUNDS[1]:, :] = 255
+        # r_raw_np[:, :X_BOUNDS[0]] = 255
+        # r_raw_np[:, X_BOUNDS[1]:] = 255
+
+        # ∆ Display images
+        # plt.gca().set_xticks(np.arange(0, int(2545.58*2), 500))
+        # plt.gca().set_yticks(np.arange(0, int(2545.58*2), 500))
+        # plt.grid()
+        plt.ylim(Y_BOUNDS[0], Y_BOUNDS[1])
+        plt.xlim(X_BOUNDS[0], X_BOUNDS[1])
+        plt.axis('off')
+        plt.imshow(r_raw_np, cmap="gray", origin='lower')
+        plt.savefig(f"_png/ralreg_150.png", bbox_inches='tight', pad_inches=0.2, dpi=1000)
         plt.close()
 
 

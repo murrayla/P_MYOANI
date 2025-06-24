@@ -1,6 +1,6 @@
 tests: ['test']
 m_ref: 1
-test: test, gcc: [1, 14, 10]
+test: test, gcc: [1, 11, 10]
 APPLY 20% DISP | val ~ 2200.0
-SOLVED i_{12}% IN:8, True
+SOLVED 20% IN:7, True
 wins: ['test']

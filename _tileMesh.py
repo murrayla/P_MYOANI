@@ -156,14 +156,15 @@ def msh_(mesh_size):
                 seen_tgs.add(tag)
 
     # ∆ Set mesh size
-    for p in gmsh.model.getEntities(dim=0):
-        gmsh.model.mesh.setSize([p], mesh_size)
+    # for p in gmsh.model.getEntities(dim=0):
+    #     gmsh.model.mesh.setSize([p], mesh_size)
 
     # ∆ Mesh generation
     gmsh.option.setNumber("Mesh.Algorithm", 5)
     gmsh.model.mesh.generate(DIM)
-    # gmsh.model.mesh.refine()
-    # gmsh.model.mesh.refine()
+    gmsh.model.mesh.refine()
+    gmsh.model.mesh.refine()
+    gmsh.model.mesh.refine()
     gmsh.model.mesh.setOrder(order=ORDER)
 
     # ∆ Save to file
@@ -184,5 +185,4 @@ def main(msh_size):
 
 # ∆ Initialise
 if __name__ == '__main__':
-    msh_size = 1100
-    main(msh_size)
+    main(600)

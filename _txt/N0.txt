@@ -1,3 +1,6 @@
 tests: ['0']
-m_ref: 1
-test: 0, gcc: [0.8, 18, 8]
+m_ref: 1100
+test: 0, gcc: [2.63, 23.22, 16.75]
+APPLY 0% DISP | val ~ 0.0
+SOLVED 0% IN:2, True
+wins: ['0']
