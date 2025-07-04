@@ -209,4 +209,4 @@ def main(msh_size):
 
 # ∆ Initialise
 if __name__ == '__main__':
-    main(200)
+    main(400)

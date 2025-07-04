@@ -16,6 +16,7 @@ from scipy.spatial import KDTree
 # ∆ Dolfin
 import ufl
 from mpi4py import MPI
+from petsc4py import PETSc
 from basix.ufl import element, mixed_element
 from dolfinx import log, io,  default_scalar_type
 from dolfinx.fem import Function, functionspace, dirichletbc, locate_dofs_topological, Expression
@@ -38,49 +39,28 @@ CUBE = {"x": 1000, "y": 1000, "z": 100}
 EDGE = [PXLS[d]*CUBE[d] for d in ["x", "y", "z"]]
 
 # ∆ Cauchy
-def cauchy_tensor(u, p, Push, gcc):
-    
-    u_nu = Push * u
+def cauchy_tensor(u):
 
-    # ∆ Kinematics
-    I = ufl.Identity(DIM)  
-    F = I + ufl.grad(u_nu)  
-    C = ufl.variable(F.T * F)  
-    E = ufl.variable(0.5*(C-I))
-
-    # ∆ Output constants
-    b0, bf, bt = gcc
-
-    # ∆ Exponential term
-    Q = (
-        bf * E[0,0]**2 + bt * 
-        (
-            E[1,1]**2 + E[2,2]**2 + E[1,2]**2 + E[2,1]**2 + 
-            E[0,1]**2 + E[1,0]**2 + E[0,2]**2 + E[2,0]**2
-        )
-    )
-
-    # ∆ Seond Piola-Kirchoff 
-    # SPK = b0/4 * ufl.exp(Q) * ufl.as_matrix([
-    #     [4*bf*E[0,0], 2*bt*(E[1,0] + E[0,1]), 2*bt*(E[2,0] + E[0,2])],
-    #     [2*bt*(E[0,1] + E[1,0]), 4*bt*E[1,1], 2*bt*(E[2,1] + E[1,2])],
-    #     [2*bt*(E[0,2] + E[2,0]), 2*bt*(E[1,2] + E[2,1]), 4*bt*E[2,2]],
-    # ]) 
-
+    I = ufl.variable(ufl.Identity(DIM))
+    F = ufl.variable(I + ufl.grad(u))
+    C = ufl.variable(F.T * F)
     Ic = ufl.variable(ufl.tr(C))
-    IIc = ufl.variable((Ic**2 - ufl.inner(C, C))/2)
-    psi = 1 * (Ic - 3) + 0 *(IIc - 3) 
-    term1 = ufl.diff(psi, Ic) + Ic * ufl.diff(psi, IIc)
-    term2 = -ufl.diff(psi, IIc)
-    SPK = 2 * F * (term1*I + term2*C) 
+    IIc = ufl.variable((Ic**2 - ufl.inner(C,C))/2)
+    J = ufl.variable(ufl.det(F))
+    c1 = 2
+    c2 = 6
+    psi = c1 * (Ic - 3) + c2 *(IIc - 3) 
+    gamma1 = ufl.diff(psi, Ic) + Ic * ufl.diff(psi, IIc)
+    gamma2 = -ufl.diff(psi, IIc)
+    firstPK = 2 * F * (gamma1*I + gamma2*C)
 
-    return 1/ufl.det(F) * F * SPK * F.T 
+    return 1/ufl.det(F) * firstPK * F.T 
 
 # ∆ Fenics simulation
 def fx_(t, file, m_ref, gcc, sim, dpm):
 
     # ∆ Begin 't' log
-    with open(f"_txt/{sim}.txt", 'a') as simlog:
+    with open(f"_txt/{sim}_HOOKPAR4.txt", 'a') as simlog:
         simlog.write(f"test: {t}, gcc: {gcc}\n")
 
     # ∆ Load mesh data and set up function spaces
@@ -99,51 +79,52 @@ def fx_(t, file, m_ref, gcc, sim, dpm):
     coords = np.array(x_n.function_space.tabulate_dof_coordinates()[:])
     tree = KDTree(coords)
 
-    # ∆ Push as Forward transform
-    Push = ufl.Identity(DIM)
-
     # ∆ Load key function variables
     mx = Function(Mxs)
     v, q = ufl.TestFunctions(Mxs)
     u, p = ufl.split(mx)
-    u_nu = Push * u
 
-    # ∆ Kinematics Setup
-    i, j, k, l, a, b = ufl.indices(6)  
-    I = ufl.Identity(DIM)  
-    F = ufl.variable(I + ufl.grad(u_nu))
-    covDev = ufl.as_tensor(ufl.grad(v)[i, j], (i, j))
-
-    # ∆ Kinematics Tensors
-    C = ufl.variable(F.T * F)  
-    B = ufl.variable(F * F.T)  
-    E = ufl.as_tensor(0.5 * (C - I))
-    J = ufl.det(F)   
-
-    # ∆ Extract Constitutive terms
-    b0, bf, bt = gcc
-
-    # ∆ Exponent term
-    Q = (
-        bf * E[0,0]**2 + bt * 
-        (
-            E[1,1]**2 + E[2,2]**2 + E[1,2]**2 + E[2,1]**2 + 
-            E[0,1]**2 + E[1,0]**2 + E[0,2]**2 + E[2,0]**2
-        )
-    )
-
-    # ∆ Seond Piola-Kirchoff 
-    SPK = b0/4 * ufl.exp(Q) * ufl.as_matrix([
-        [4*bf*E[0,0], 2*bt*(E[1,0] + E[0,1]), 2*bt*(E[2,0] + E[0,2])],
-        [2*bt*(E[0,1] + E[1,0]), 4*bt*E[1,1], 2*bt*(E[2,1] + E[1,2])],
-        [2*bt*(E[0,2] + E[2,0]), 2*bt*(E[1,2] + E[2,1]), 4*bt*E[2,2]],
-    ]) - p * I
+    # ∆ Kinematics 
+    I = ufl.variable(ufl.Identity(DIM))
+    F = ufl.variable(I + ufl.grad(u))
+    C = ufl.variable(F.T * F)
+    Ic = ufl.variable(ufl.tr(C))
+    IIc = ufl.variable((Ic**2 - ufl.inner(C,C))/2)
+    J = ufl.variable(ufl.det(F))
+    c1 = 2
+    c2 = 6
+    psi = c1 * (Ic - 3) + c2 *(IIc - 3) 
+    gamma1 = ufl.diff(psi, Ic) + Ic * ufl.diff(psi, IIc)
+    gamma2 = -ufl.diff(psi, IIc)
+    firstPK = 2 * F * (gamma1*I + gamma2*C) + p * J * ufl.inv(F).T
+    cau = (1/J * firstPK * F).T
 
     # ∆ Residual
     dx = ufl.Measure(integral_type="dx", domain=domain, metadata={"quadrature_degree": QUADRATURE})
-    R = ufl.as_tensor(SPK[a, b] * F[j, b] * covDev[j, a]) * dx + q * (J - 1) * dx
+    R = ufl.inner(ufl.grad(v), firstPK) * dx + q * (J - 1) * dx
 
     log.set_log_level(log.LogLevel.INFO)
+
+    # ∆ Solver
+    problem = NonlinearProblem(R, mx, [])
+    solver = NewtonSolver(domain.comm, problem)
+    solver.atol = TOL
+    solver.rtol = TOL
+    solver.max_it = 100
+    solver.convergence_criterion = "incremental"
+    # solver.relaxation_parameter = 1.0
+
+    # ksp = solver.krylov_solver
+    # opts = PETSc.Options()
+    # option_prefix = ksp.getOptionsPrefix()
+    # opts[f"{option_prefix}ksp_type"] = "gmres"
+    # opts[f"{option_prefix}ksp_rtol"] = 1e-3
+    # opts[f"{option_prefix}ksp_max_it"] = 200
+    # opts[f"{option_prefix}pc_type"] = "hypre"
+    # opts[f"{option_prefix}pc_hypre_type"] = "boomeramg"
+    # opts[f"{option_prefix}pc_hypre_boomeramg_max_iter"] = 1
+    # opts[f"{option_prefix}pc_hypre_boomeramg_cycle_type"] = "v"
+    # ksp.setFromOptions()
 
     # ∆ Data store
     dis, pre = Function(V), Function(P) 
@@ -152,10 +133,10 @@ def fx_(t, file, m_ref, gcc, sim, dpm):
     pre.name = "P - Pressure"
     eps.name = "E - Green Strain"
     sig.name = "S - Cauchy Stress"
-    dis_file = io.VTXWriter(MPI.COMM_WORLD, f"_bp/_{t}/_DISP.bp", dis, engine="BP4")
-    pre_file = io.VTXWriter(MPI.COMM_WORLD, f"_bp/_{t}/_PRE.bp", pre, engine="BP4")
-    sig_file = io.VTXWriter(MPI.COMM_WORLD, f"_bp/_{t}/_SIG.bp", sig, engine="BP4")
-    eps_file = io.VTXWriter(MPI.COMM_WORLD, f"_bp/_{t}/_EPS.bp", eps, engine="BP4")
+    dis_file = io.VTXWriter(MPI.COMM_WORLD, f"_bp/_{t}_{m_ref}/_DISP.bp", dis, engine="BP4")
+    pre_file = io.VTXWriter(MPI.COMM_WORLD, f"_bp/_{t}_{m_ref}/_PRE.bp", pre, engine="BP4")
+    sig_file = io.VTXWriter(MPI.COMM_WORLD, f"_bp/_{t}_{m_ref}/_SIG.bp", sig, engine="BP4")
+    eps_file = io.VTXWriter(MPI.COMM_WORLD, f"_bp/_{t}_{m_ref}/_EPS.bp", eps, engine="BP4")
 
     # ∆ Setup boundary terms
     tgs_x0 = ft.find(3000)
@@ -167,39 +148,33 @@ def fx_(t, file, m_ref, gcc, sim, dpm):
     zx0 = locate_dofs_topological(Mxs.sub(0).sub(Z), domain.topology.dim - 1, tgs_x0)
     zx1 = locate_dofs_topological(Mxs.sub(0).sub(Z), domain.topology.dim - 1, tgs_x1)
 
-    for ii, kk in enumerate([20]):
+    # ∆ Unmoving BCs
+    d_yy0 = dirichletbc(default_scalar_type(0.0), yx0, Mxs.sub(0).sub(Y))
+    d_yy1 = dirichletbc(default_scalar_type(0.0), yx1, Mxs.sub(0).sub(Y))
+    d_zy0 = dirichletbc(default_scalar_type(0.0), zx0, Mxs.sub(0).sub(Z))
+    d_zy1 = dirichletbc(default_scalar_type(0.0), zx1, Mxs.sub(0).sub(Z))
+
+    for ii, kk in enumerate([0, 5, 10, 15, 20]):
 
         # ∆ Apply displacements as boundary conditions
         du = CUBE["x"] * PXLS["x"] * (kk / 100)
-        print(f"APPLY {dpm}% DISP | val ~ {np.round(du,2)}")
-        d_xy0 = dirichletbc(default_scalar_type(du), xx0, Mxs.sub(0).sub(X))
-        d_xy1 = dirichletbc(default_scalar_type(0.0), xx1, Mxs.sub(0).sub(X))
-        d_yy0 = dirichletbc(default_scalar_type(0.0), yx0, Mxs.sub(0).sub(Y))
-        d_yy1 = dirichletbc(default_scalar_type(0.0), yx1, Mxs.sub(0).sub(Y))
-        d_zy0 = dirichletbc(default_scalar_type(0.0), zx0, Mxs.sub(0).sub(Z))
-        d_zy1 = dirichletbc(default_scalar_type(0.0), zx1, Mxs.sub(0).sub(Z))
+        d_xy0 = dirichletbc(default_scalar_type(du//2), xx0, Mxs.sub(0).sub(X))
+        d_xy1 = dirichletbc(default_scalar_type(-du//2), xx1, Mxs.sub(0).sub(X))
         bc = [d_xy0, d_yy0, d_zy0, d_xy1, d_yy1, d_zy1]
+        problem.bcs = bc
 
         # ∆ Write displacement store
-        with open(f"_txt/{sim}.txt", 'a') as simlog:
-            simlog.write(f"APPLY {dpm}% DISP | val ~ {np.round(du,2)}\n")
-
-        # ∆ Solver
-        problem = NonlinearProblem(R, mx, bc)
-        solver = NewtonSolver(domain.comm, problem)
-        solver.atol = TOL
-        solver.rtol = TOL
-        solver.max_it = 15
-        solver.convergence_criterion = "incremental"
+        with open(f"_txt/{sim}_HOOKPAR4.txt", 'a') as simlog:
+            simlog.write(f"APPLY {kk}% DISP | val ~ {np.round(du,2)}\n")
 
         # ∆ Solve
         try: 
             num_its, res = solver.solve(mx)
-            print(f"SOLVED {dpm}% IN:{num_its}, {res}")
-            with open(f"_txt/{sim}.txt", 'a') as simlog:
-                simlog.write(f"SOLVED {dpm}% IN:{num_its}, {res}\n")
+            print(f"SOLVED {kk}% IN:{num_its}, {res}")
+            with open(f"_txt/{sim}_HOOKPAR4.txt", 'a') as simlog:
+                simlog.write(f"SOLVED {kk}% IN:{num_its}, {res}\n")
         except:
-            with open(f"_txt/{sim}.txt", 'a') as simlog:
+            with open(f"_txt/{sim}_HOOKPAR4.txt", 'a') as simlog:
                 simlog.write(f"FAILED.\n")
             return -1, 0 
         
@@ -210,13 +185,11 @@ def fx_(t, file, m_ref, gcc, sim, dpm):
         pre.interpolate(p_eval)
         # µ Evaluate stress
         cauchy = Expression(
-            e=cauchy_tensor(u_eval, p_eval, Push, gcc), 
+            e=cauchy_tensor(u_eval), 
             X=Tes.element.interpolation_points()
         )
         # µ Evaluate strain
-        green = Expression(e=E, X=Tes.element.interpolation_points())
         sig.interpolate(cauchy)
-        eps.interpolate(green)
         
         # ∆ Format for saving
         sig_arr, eps_arr = sig.x.array, eps.x.array
@@ -260,15 +233,9 @@ def fx_(t, file, m_ref, gcc, sim, dpm):
             (df["Z"] >= 100) & (df["Z"] <= EDGE[2] - 100) 
         )]
         peak = (peak_df.loc[:, 'sig_xx'].mean()**2 + peak_df.loc[:, 'sig_xy'].mean()**2 + peak_df.loc[:, 'sig_xz'].mean()**2)**0.5
-        
-        
-        # print(sig_c)
-        print(peak)
-        print(sigs)
 
-        
         # ∆ Save CSV
-        df.to_csv(f"_csv/{t}_{dpm}.csv")  
+        df.to_csv(f"_csv/{t}_{kk}_{m_ref}.csv")  
 
         # ∆ Write files
         dis_file.write(ii)
@@ -288,7 +255,7 @@ def fx_(t, file, m_ref, gcc, sim, dpm):
 def main(tests, m_ref, sim, dpm):
 
     # ∆ Open log file
-    with open(f"_txt/{sim}.txt", 'w') as simlog:
+    with open(f"_txt/{sim}_HOOKPAR4.txt", 'w') as simlog:
         simlog.write(f"tests: {tests}\nm_ref: {m_ref}\n")
 
     # ∆ Iterate tests 
@@ -297,10 +264,7 @@ def main(tests, m_ref, sim, dpm):
 
         print("\t" + " ~> Test: {}".format(t))
         # ∆ Load constitutive values
-        # gcc = [4, 10, 14]
-        # gcc = [2.63, 23.22, 16.75] #23.42
         gcc = [1, 11, 10]
-        # gcc = [4.667357969363915,  9.171759219672838,  49.651646465638066]
          
         # ∆ Mesh file
         file = f"_msh/em_{m_ref}.msh"
@@ -310,21 +274,14 @@ def main(tests, m_ref, sim, dpm):
         if win: wins.append(t)
 
     # ∆ Append win dataz
-    with open(f"_txt/{sim}.txt", 'a') as simlog:
+    with open(f"_txt/{sim}_HOOKPAR4.txt", 'a') as simlog:
         simlog.write(f"wins: {wins}")
     print(f" ~> WINS: {wins}")
 
 # ∆ Inititate 
 if __name__ == '__main__':
 
-    # ∆ Indicate test cases
-    # tests = ["test"] + [x for x in [str(y) for y in range(0, 17, 1)]]
-    # ∆ Open log file
-
-    # refs = [x for x in range(200, 3100, 100)]
-    # refs = refs[::-1]
-    # for r in refs:
-    r = 200
+    r = 1100
     tests = ["test"]
     dpm = 20
     sim = "N_TEST" + str(dpm)

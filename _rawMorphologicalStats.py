@@ -29,6 +29,44 @@ X_BOUNDS = [int((Y_BOUNDS[1]-M_D)), int(E_D-(Y_BOUNDS[1]-M_D))]
 EXCLUSION = [335, 653, 775, 1108, 1406] 
 CUBE = {"x": 1000, "y": 1000, "z": 100}
 
+# ∆ Rot set
+def rot_data(data, norm_df):
+
+    # ∆ Dummy slice for calculating shape data
+    dummy = np.ones_like(data)
+    h, w, d = dummy.shape
+    cx, cy = (w-1)/2, (h-1)/2
+    dummy = []
+
+    # ∆ Create a new copy to store rotated centroids
+    rot_df = norm_df.copy(deep=True)
+    new_cents = []
+
+    # ∆ Iterate data and tile
+    for _, row in norm_df.iterrows():
+
+        # ∆ Load centroid data
+        ori = np.array(ast.literal_eval(row["Centroid"]))
+        vx, vy, vz = ori
+
+        # ∆ Rotate data to determine if within desired region
+        s_vx = vx - cx
+        s_vy = vy - cy
+        n45 = -np.pi/4
+        rot = np.array([
+            [np.cos(n45), -np.sin(n45)],
+            [np.sin(n45),  np.cos(n45)]
+        ])
+        s_rx, s_ry = np.dot(rot, [s_vx, s_vy])
+        rx = s_rx + M_D
+        ry = s_ry + M_D
+
+        # ∆ New centroid
+        new_cents.append([float(rx), float(ry), float(vz)])
+
+    rot_df["Centroid"] = new_cents
+    rot_df.to_csv(f"_csv/rot_norm.csv", index=False)
+
 # ∆ Tile data 
 def tile_data(data, norm_df):
 
@@ -84,7 +122,6 @@ def tile_data(data, norm_df):
 
         tile_df = norm_df[norm_df["ID"].isin(r_id)].copy()
         tile_df.to_csv(f"_csv/tile_{i}.csv", index=False)
-            
         
 # ∆ Validate data
 def validate_data(data, norm_df, iso_df):
@@ -647,7 +684,10 @@ def main(seg_np):
 
     # ∆ Validation plot
     norm_df = pd.read_csv("_csv/norm_stats.csv")
-    validate_data(seg_np, norm_df, iso_df)
+    # validate_data(seg_np, norm_df, iso_df)
+
+    # ∆ Save a rotated dataset
+    rot_data(seg_np, norm_df)
 
     # ∆ Tile dataset
     # tile_data(seg_np, norm_df)
