@@ -16,9 +16,10 @@ from scipy.spatial import KDTree
 # ∆ Dolfin
 import ufl
 from mpi4py import MPI
+from petsc4py import PETSc
 from basix.ufl import element, mixed_element
 from dolfinx import log, io,  default_scalar_type
-from dolfinx.fem import Function, functionspace, dirichletbc, locate_dofs_topological, Expression
+from dolfinx.fem import Function, functionspace, dirichletbc, locate_dofs_topological, Expression, Constant
 from dolfinx.fem.petsc import NonlinearProblem
 from dolfinx.nls.petsc import NewtonSolver
 
@@ -68,11 +69,9 @@ def cauchy_tensor(u, gcc):
     return 1/ufl.det(F) * F * SPK * F.T 
 
 # ∆ Fenics simulation
-def fx_(t, file, m_ref, gcc, sim, dpm):
+def fx_(file, gcc):
 
-    # ∆ Begin 't' log
-    with open(f"_txt/{sim}.txt", 'a') as simlog:
-        simlog.write(f"test: {t}, gcc: {gcc}\n")
+    t = "test"
 
     # ∆ Load mesh data and set up function spaces
     domain, _, ft = io.gmshio.read_from_msh(filename=file, comm=MPI.COMM_WORLD, rank=0, gdim=DIM)
@@ -132,6 +131,23 @@ def fx_(t, file, m_ref, gcc, sim, dpm):
 
     log.set_log_level(log.LogLevel.INFO)
 
+    # ∆ Solver
+    problem = NonlinearProblem(R, mx, [])
+    solver = NewtonSolver(MPI.COMM_WORLD, problem)
+    solver.atol = TOL
+    solver.rtol = TOL
+    solver.max_it = 50
+    solver.convergence_criterion = "incremental"
+
+    ksp = solver.krylov_solver
+    opts = PETSc.Options()
+    ksp.setOptionsPrefix("")
+    opts["ksp_type"] = "preonly"
+    opts["pc_type"] = "lu"
+    opts["pc_factor_mat_solver_type"] = "mumps"
+    opts["ksp_monitor"] = None
+    ksp.setFromOptions()
+
     # ∆ Data store
     dis, pre = Function(V), Function(P) 
     sig = Function(Tes)
@@ -153,40 +169,29 @@ def fx_(t, file, m_ref, gcc, sim, dpm):
     zx1 = locate_dofs_topological(Mxs.sub(0).sub(Z), domain.topology.dim - 1, tgs_x1)
 
     # ∆ Set boundaries
+    du_pos = Constant(domain, default_scalar_type(0.0))
+    du_neg = Constant(domain, default_scalar_type(0.0))
+    d_xy0 = dirichletbc(du_pos, xx0, Mxs.sub(0).sub(X)) 
+    d_xy1 = dirichletbc(du_neg, xx1, Mxs.sub(0).sub(X)) 
     d_yy0 = dirichletbc(default_scalar_type(0.0), yx0, Mxs.sub(0).sub(Y))
     d_yy1 = dirichletbc(default_scalar_type(0.0), yx1, Mxs.sub(0).sub(Y))
     d_zy0 = dirichletbc(default_scalar_type(0.0), zx0, Mxs.sub(0).sub(Z))
     d_zy1 = dirichletbc(default_scalar_type(0.0), zx1, Mxs.sub(0).sub(Z))
+    bc = [d_xy0, d_yy0, d_zy0, d_xy1, d_yy1, d_zy1]
+    problem.bcs = bc
 
-    for ii, kk in enumerate([0, 5, 10, 15, 20, 25]):
+    for ii, kk in enumerate([0, 5, 10, 15, 20]):
 
         # ∆ Apply displacements as boundary conditions
         du = CUBE["x"] * PXLS["x"] * (kk / 100)
-        d_xy0 = dirichletbc(default_scalar_type(du//2), xx0, Mxs.sub(0).sub(X))
-        d_xy1 = dirichletbc(default_scalar_type(-du//2), xx1, Mxs.sub(0).sub(X))
-        bc = [d_xy0, d_yy0, d_zy0, d_xy1, d_yy1, d_zy1]
-
-        # ∆ Write displacement store
-        with open(f"_txt/{sim}.txt", 'a') as simlog:
-            simlog.write(f"APPLY {kk}% DISP | val ~ {np.round(du,2)}\n")
-
-        # ∆ Solver
-        problem = NonlinearProblem(R, mx, bc)
-        solver = NewtonSolver(domain.comm, problem)
-        solver.atol = TOL
-        solver.rtol = TOL
-        solver.max_it = 15
-        solver.convergence_criterion = "incremental"
+        du_pos.value = default_scalar_type(du // 2)
+        du_neg.value = default_scalar_type(-du //2)
 
         # ∆ Solve
         try: 
             num_its, res = solver.solve(mx)
             print(f"SOLVED {kk}% IN:{num_its}, {res}")
-            with open(f"_txt/{sim}.txt", 'a') as simlog:
-                simlog.write(f"SOLVED {kk}% IN:{num_its}, {res}\n")
         except:
-            with open(f"_txt/{sim}.txt", 'a') as simlog:
-                simlog.write(f"FAILED.\n")
             return -1, 0 
         
         # ∆ Evaluation
@@ -241,7 +246,7 @@ def fx_(t, file, m_ref, gcc, sim, dpm):
         )]
         
         # ∆ Save CSV
-        df.to_csv(f"_csv/{t}_{dpm}.csv")  
+        df.to_csv(f"_csv/testgcc_{kk}.csv")  
 
         # ∆ Write files
         dis_file.write(ii)
@@ -256,37 +261,22 @@ def fx_(t, file, m_ref, gcc, sim, dpm):
     return num_its, 1
 
 # ∆ Main
-def main(tests, m_ref, sim, dpm):
+def main(m_ref):
 
-    # ∆ Open log file
-    with open(f"_txt/{sim}.txt", 'w') as simlog:
-        simlog.write(f"tests: {tests}\nm_ref: {m_ref}\n")
+    # ∆ Test vals
+    gcc = [1, 11, 10]
+    
+    # ∆ Mesh file
+    file = f"_msh/em_{m_ref}.msh"
 
-    # ∆ Iterate tests 
-    wins = []
-    for t in tests:
+    # ∆ Simulation 
+    _, win = fx_(file, gcc)
 
-        # ∆ Isotropic
-        gcc = [1, 1, 1]
-        
-        # ∆ Mesh file
-        file = f"_msh/em_{m_ref}.msh"
-
-        # ∆ Simulation 
-        _, win = fx_(t, file, m_ref, gcc, sim, dpm)
-        if win: wins.append(t)
-
-    # ∆ Append win dataz
-    with open(f"_txt/{sim}.txt", 'a') as simlog:
-        simlog.write(f"wins: {wins}")
-    print(f" ~> WINS: {wins}")
+    print(f" ~> WIN: {win}")
 
 # ∆ Inititate 
 if __name__ == '__main__':
 
     # ∆ Indicate test cases
-    r = 200
-    tests = ["test"]
-    dpm = 20
-    sim = "N_TEST" + str(dpm)
-    main(tests, r, sim, dpm)
+    r = 400
+    main(r)

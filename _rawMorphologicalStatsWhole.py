@@ -294,7 +294,7 @@ def isolate_segs(data):
         ry = s_ry + M_D
 
         # ∆ Check region
-        if ((ry < X_BOUNDS[1]) & (ry > X_BOUNDS[0])):
+        if ((rx < Y_BOUNDS[1]) & (rx > Y_BOUNDS[0])):
             props_dict["ID"].append(val)
             props_dict["Centroid"].append([vx, vy, vz])
 

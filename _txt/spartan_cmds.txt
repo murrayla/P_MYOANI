@@ -18,7 +18,7 @@ scp -r /Users/murrayla/Documents/main_PhD/P_MYOANI murrayla@spartan.hpc.unimelb.
 
 
 SETUP:
-sinteractive -p interactive --time=3:00:00 --cpus-per-task=3 --mem=512G
+sinteractive -p interactive --time=0:30:00 --cpus-per-task=2 --mem=512G
 module purge
 module load Anaconda3/2024.02-1
 eval "$(conda shell.bash hook)"

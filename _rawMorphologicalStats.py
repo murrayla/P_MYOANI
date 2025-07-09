@@ -26,7 +26,7 @@ PIXX, PIXY, PIXZ = 11, 11, 50
 M_D, E_D = 2545.58, 2545.58*2
 Y_BOUNDS = [1800, 3600]
 X_BOUNDS = [int((Y_BOUNDS[1]-M_D)), int(E_D-(Y_BOUNDS[1]-M_D))]
-EXCLUSION = [335, 653, 775, 1108, 1406] 
+EXCLUSION = [335, 653, 775, 1108, 1406, 42, 185, 191, 335, 653, 775, 1108, 1406, 1674, 44, 136, 1652, 1732, 1744]
 CUBE = {"x": 1000, "y": 1000, "z": 100}
 
 # ∆ Rot set
@@ -37,6 +37,8 @@ def rot_data(data, norm_df):
     h, w, d = dummy.shape
     cx, cy = (w-1)/2, (h-1)/2
     dummy = []
+
+    norm_df = norm_df[~norm_df['ID'].isin(EXCLUSION)]
 
     # ∆ Create a new copy to store rotated centroids
     rot_df = norm_df.copy(deep=True)
@@ -65,7 +67,7 @@ def rot_data(data, norm_df):
         new_cents.append([float(rx), float(ry), float(vz)])
 
     rot_df["Centroid"] = new_cents
-    rot_df.to_csv(f"_csv/rot_norm.csv", index=False)
+    rot_df.to_csv(f"_csv/rot_norm_w.csv", index=False)
 
 # ∆ Tile data 
 def tile_data(data, norm_df):
@@ -121,7 +123,7 @@ def tile_data(data, norm_df):
             r_id.append(id)
 
         tile_df = norm_df[norm_df["ID"].isin(r_id)].copy()
-        tile_df.to_csv(f"_csv/tile_{i}.csv", index=False)
+        tile_df.to_csv(f"_csv/tile_{i}_w.csv", index=False)
         
 # ∆ Validate data
 def validate_data(data, norm_df, iso_df):
@@ -675,22 +677,22 @@ def main(seg_np):
     # iso_df = isolate_segs(seg_np)
 
     # # ∆ Determine statistical data
-    reg_df = pd.read_csv("_csv/reg_stats.csv")
+    # reg_df = pd.read_csv("_csv/reg_stats.csv")
     # deep_stats(seg_np, reg_df)
 
     # # ∆ Standardise
-    iso_df = pd.read_csv("_csv/iso_stats.csv")
+    # iso_df = pd.read_csv("_csv/iso_stats.csv")
     # norm_data(iso_df)
 
     # ∆ Validation plot
-    norm_df = pd.read_csv("_csv/norm_stats.csv")
+    norm_df = pd.read_csv("_csv/norm_stats_whole.csv")
     # validate_data(seg_np, norm_df, iso_df)
 
     # ∆ Save a rotated dataset
     rot_data(seg_np, norm_df)
 
     # ∆ Tile dataset
-    # tile_data(seg_np, norm_df)
+    tile_data(seg_np, norm_df)
 
 # ∆ Inititate
 if __name__ == "__main__":

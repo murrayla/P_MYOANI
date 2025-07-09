@@ -24,7 +24,7 @@ PIXX, PIXY, PIXZ = 11, 11, 50
 M_D, E_D = 2545.58, 2545.58*2
 Y_BOUNDS = [1800, 3600]
 X_BOUNDS = [int((Y_BOUNDS[1]-M_D)), int(E_D-(Y_BOUNDS[1]-M_D))]
-EXCLUSION = [335, 653, 775, 1108, 1406] 
+EXCLUSION = [335, 653, 775, 1108, 1406, 42, 185, 191, 335, 653, 775, 1108, 1406, 1674, 44, 136, 1652, 1732, 1744]
 CUBE = {"x": 1000, "y": 1000, "z": 100}
 
 def reg_hists():
@@ -33,7 +33,7 @@ def reg_hists():
     sns.set_style("whitegrid")
 
     # ∆ Read all angle data in
-    norm_df = pd.read_csv(f"_csv/rot_norm.csv")
+    norm_df = pd.read_csv(f"_csv/rot_norm_w.csv")
     norm_df[['x', 'y', 'z']] = norm_df['Centroid'].apply(lambda s: pd.Series(ast.literal_eval(s)))
 
     # ∆ Extract coordinate data
@@ -45,16 +45,18 @@ def reg_hists():
     # µ Nucleus set
     nuc_df = (
         (norm_df['z'] <= 160) &
-        (norm_df['x'] >= 2200) & (norm_df['x'] <= 3100) &
+        (norm_df['x'] >= 2300) & (norm_df['x'] <= 3100) &
         (norm_df['y'] <= 2000)
     )
     # µ Periphery set
     per_df = (
         ((norm_df['z'] <= z_min + 200) | (norm_df['z'] >= z_max - 500)) &
-        ((norm_df['x'] <= x_min + 300) | (norm_df['x'] >= x_max - 200))
+        ((norm_df['x'] <= x_min + 200) | (norm_df['x'] >= x_max - 200))
     )
     # µ Central set
     cen_df = ~(nuc_df | per_df)
+
+    lab_df = (((norm_df['x'] <= 1900)))
 
     # ∆ Store angle data
     sph_nuc = norm_df.loc[nuc_df, "Sph_[DEG]"].tolist()
@@ -149,8 +151,8 @@ def reg_hists():
                color=colors[0], label="Nucleus", alpha=1)
     ax.scatter(norm_df.loc[per_df, 'x'], norm_df.loc[per_df, 'y'], norm_df.loc[per_df, 'z'],
                color=colors[1], label="Periphery", alpha=1)
-    ax.scatter(norm_df.loc[cen_df, 'x'], norm_df.loc[cen_df, 'y'], norm_df.loc[cen_df, 'z'],
-               color=colors[2], label="Core", alpha=1)
+    # ax.scatter(norm_df.loc[cen_df, 'x'], norm_df.loc[cen_df, 'y'], norm_df.loc[cen_df, 'z'],
+    #            color=colors[2], label="Core", alpha=1)
 
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
@@ -158,12 +160,12 @@ def reg_hists():
     ax.set_title("Region Classification by Coordinate")
     ax.legend()
     plt.tight_layout()
+    plt.show()
     plt.savefig(f"_png/NucPerCen_Scatter3D.png")
-    # plt.show()
     plt.close()
 
     # ∆ 2D Top-down Scatterplot (X vs Z)
-    plt.figure(figsize=(10, 8), dpi=300)
+    plt.figure(figsize=(6, 8), dpi=300)
 
     # Plot each region
     plt.scatter(norm_df.loc[nuc_df, 'x'], norm_df.loc[nuc_df, 'y'],
@@ -172,14 +174,14 @@ def reg_hists():
                 color=colors[1], label="Periphery", alpha=0.6, edgecolors='black', s=40)
     plt.scatter(norm_df.loc[cen_df, 'x'], norm_df.loc[cen_df, 'y'],
                 color=colors[2], label="Core", alpha=0.6, edgecolors='black', s=40)
-
+    
     plt.xlabel("X")
     plt.ylabel("Y")
     plt.title("Top-Down Region Classification (X vs Y)")
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig(f"_png/NucPerCen_Scatter2D.png")
+    plt.savefig(f"_png/NucPerCen_Scatter2D_Whole.png")
     plt.close()
 
 def heat_bar_(angle_key, label):
@@ -189,7 +191,7 @@ def heat_bar_(angle_key, label):
     all_angles = []
 
     for i in range(18):
-        df = pd.read_csv(f"_csv/tile_{i}.csv")
+        df = pd.read_csv(f"_csv/tile_{i}_w.csv")
         angles = df[angle_key].dropna().values
         angle_data.append(angles)
         all_angles.extend(angles)
@@ -251,7 +253,7 @@ def hist_dist(angle_key, color, label):
     axes = axes.flatten()
 
     for i in range(0, 18, 1):
-        df = pd.read_csv(f"_csv/tile_{i}.csv")
+        df = pd.read_csv(f"_csv/tile_{i}_w.csv")
         angles = df[angle_key].dropna()
         all_angles.extend(angles)
 
@@ -265,6 +267,9 @@ def hist_dist(angle_key, color, label):
     plt.tight_layout()
     fig.savefig(f"_png/{label}_Grid.png")
     plt.close()
+
+    norm_df = pd.read_csv(f"_csv/rot_norm_w.csv")
+    all_angles = norm_df[angle_key].tolist()
 
     # ∆ Final cumulative histogram
     plt.figure(figsize=(6, 8), dpi=500)

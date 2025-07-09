@@ -107,7 +107,7 @@ def fx_(t, file, m_ref, gcc, sim, dpm):
 
     # ∆ Solver
     problem = NonlinearProblem(R, mx, [])
-    solver = NewtonSolver(domain.comm, problem)
+    solver = NewtonSolver(MPI.COMM_WORLD, problem)
     solver.atol = TOL
     solver.rtol = TOL
     solver.max_it = 100
@@ -118,8 +118,7 @@ def fx_(t, file, m_ref, gcc, sim, dpm):
     # opts = PETSc.Options()
     # option_prefix = ksp.getOptionsPrefix()
     # opts[f"{option_prefix}ksp_type"] = "gmres"
-    # opts[f"{option_prefix}ksp_rtol"] = 1e-3
-    # opts[f"{option_prefix}ksp_max_it"] = 200
+    # opts[f"{option_prefix}ksp_rtol"] = 1.0e-8
     # opts[f"{option_prefix}pc_type"] = "hypre"
     # opts[f"{option_prefix}pc_hypre_type"] = "boomeramg"
     # opts[f"{option_prefix}pc_hypre_boomeramg_max_iter"] = 1
