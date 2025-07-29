@@ -1,5 +1,5 @@
 TO:
-scp /Users/murrayla/Documents/main_PhD/P_MYOANI/_feSim.py murrayla@spartan.hpc.unimelb.edu.au:/data/gpfs/projects/punim1102/liam/P_MYOANI
+scp /Users/murrayla/Documents/main_PhD/P_MYOANI/_csv/reg_.csv murrayla@spartan.hpc.unimelb.edu.au:/data/gpfs/projects/punim1102/liam/P_MYOANI/_csv/
 
 
 FROM:
@@ -8,17 +8,22 @@ scp -r murrayla@spartan.hpc.unimelb.edu.au:/data/gpfs/projects/punim1102/liam/P_
 
 
 FROM: (whole group)
-scp -r murrayla@spartan.hpc.unimelb.edu.au:/data/gpfs/projects/punim1102/liam/P_MYOANI/_bp/ /Users/murrayla/Documents/main_PhD/P_MYOANI/_bp/
+scp -r murrayla@spartan.hpc.unimelb.edu.au:/data/gpfs/projects/punim1102/liam/P_MYOANI/_bp/_test/ /Users/murrayla/Documents/main_PhD/P_MYOANI/_bp/
 
+scp -r murrayla@spartan.hpc.unimelb.edu.au:/data/gpfs/projects/punim1102/liam/P_MYOANI/_csv/ /Users/murrayla/Documents/main_PhD/P_MYOANI/_csv/
 
 
 scp -r /Users/murrayla/Documents/main_PhD/P_MYOANI murrayla@spartan.hpc.unimelb.edu.au:/data/gpfs/projects/punim1102/liam/P_MYOANI
 
+scp murrayla@spartan.hpc.unimelb.edu.au:/data/gpfs/projects/punim1102/liam/P_MYOANI/_csv/ref_test.csv /Users/murrayla/Documents/main_PhD/P_MYOANI/
 
 
+
+
+scp /Users/murrayla/Documents/main_PhD/P_MYOANI/_csv/norm_stats_whole.csv murrayla@spartan.hpc.unimelb.edu.au:/data/gpfs/projects/punim1102/liam/P_MYOANI/_csv/
 
 SETUP:
-sinteractive -p interactive --time=0:30:00 --cpus-per-task=2 --mem=512G
+sinteractive -p interactive --time=1:00:00 --cpus-per-task=10 --mem=128G
 module purge
 module load Anaconda3/2024.02-1
 eval "$(conda shell.bash hook)"
@@ -28,4 +33,9 @@ module purge
 module load Anaconda3/2024.02-1
 eval "$(conda shell.bash hook)"
 conda activate vis
+
+module purge
+module load Anaconda3/2024.02-1
+eval "$(conda shell.bash hook)"
+conda activate dolfin
 

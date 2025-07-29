@@ -1,4 +1,4 @@
 TESTING REFERENCE LEVELS
-test: 1
-test passed @ 20%peak: 5.295420417645123
-sigs: [[np.float64(4.973447692644252), np.float64(3.224877482198027), np.float64(3.312189878286113), np.float64(5.613768015037292), np.float64(6.827084370043815)]]
+test: 400
+test passed @ 20%peak: 0.0
+sigs: [[np.float64(0.0), np.float64(0.0), np.float64(0.0), np.float64(0.0), np.float64(0.0)]]

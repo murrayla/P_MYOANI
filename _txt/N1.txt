@@ -1,9 +1,0 @@
-tests: ['0', '4']
-m_ref: 1
-test: 0, gcc: [0.4, 1.2, 1]
-APPLY 1% DISP | val ~ 110.0
-SOLVED i_{12}% IN:3, True
-test: 4, gcc: [0.4, 1.2, 1]
-APPLY 1% DISP | val ~ 110.0
-SOLVED i_{183}% IN:3, True
-wins: ['0', '4']

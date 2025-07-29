@@ -10,14 +10,19 @@
 # ∆ Raw
 import napari
 import numpy as np
+import pandas as pd
 
 # ∆ Main
 if __name__ == "__main__":
 
     # ∆ Load raw and segmentation data
     # raw_data = np.load("/Users/murrayla/Documents/main_PhD/BIG_SEG/big_xyz_100_3700_100_3700_40_339.npy").astype(np.uint16)
-    # seg_data = np.load("/Users/murrayla/Documents/main_PhD/BIG_SEG/filtered.npy").astype(np.uint16)
-    seg_data = np.load("_npy/red_seg.npy").astype(np.uint16)
+    seg_data = np.load("/Users/murrayla/Documents/main_PhD/BIG_SEG/filtered.npy").astype(np.uint16)[:, :, :100]
+    # seg_data = np.load("_npy/red_seg.npy").astype(np.uint16)
+
+    ids = pd.read_csv("_csv/norm_stats_whole.csv")["ID"].to_numpy()
+    mask = ~np.isin(seg_data, ids)
+    seg_data[mask] = 0
 
     # ∆ Transform orientations to view
     affine = np.array([[-1, 0, 0], [0, 5, 0], [0, 0, 1],])
@@ -26,6 +31,9 @@ if __name__ == "__main__":
     viewer = napari.Viewer(title='Annotator')
     # raw_layer = viewer.add_image(raw_data, name = "M: Raw Disc Data", affine=affine)
     seg_layer = viewer.add_labels(seg_data, name = "L: Disc Annotations", affine=affine)
+
+    # viewer = napari.Viewer()
+    viewer.theme = 'light'
 
     # ∆ Binding
     # µ Down 

@@ -26,37 +26,78 @@ X_BOUNDS = [int((Y_BOUNDS[1]-M_D)), int(E_D-(Y_BOUNDS[1]-M_D))]
 # ∆ Region thumbs
 def thumbs(raw_np, seg_np):
 
+    # # ∆ Generate figure
+    # fig, axes = plt.subplots(3, 6, figsize=(18, 9), dpi=300)
+    # axes = axes.flatten()
+
+    # # # ∆ Load region start-points
+    # iso_df = pd.read_csv("_csv/reg_.csv")
+
+    #   # ∆ Iterate through regions
+    # for i, row in iso_df.iterrows():
+
+    #     r_raw_np = ndimage.rotate(
+    #         seg_np[:, :, row["z"]+50], -45, reshape=True, order=1
+    #     )[row["x"]:row["x"]+1000, row["y"]:row["y"]+1000]
+
+    #     # ∆ Apply to axes
+    #     axes[i].imshow(r_raw_np, cmap='gray')
+    #     axes[i].set_title(f"Region {i}")
+    #     axes[i].set_axis_off() 
+
+    # plt.savefig(f"_png/seg_grid.png", bbox_inches='tight', pad_inches=0.2, dpi=500)
+    # plt.close()
+    
+    # # ∆ Iterate through regions
+    # for i, row in iso_df.iterrows():
+
+    #     # # ∆ Isolate rotated component
+    #     # r_raw_np = ndimage.rotate(
+    #     #     raw_np[:, :, row["z"]+50], -45, reshape=True, order=1, cval=np.mean(raw_np[:, :, row["z"]+50])
+    #     # )[row["x"]:row["x"]+1000, row["y"]:row["y"]+1000]
+
+    #     r_raw_np = ndimage.rotate(
+    #         seg_np[:, :, row["z"]+50], -45, reshape=True, order=1
+    #     )[row["x"]:row["x"]+1000, row["y"]:row["y"]+1000]
+
+    #     # # ∆ Isolate rotated component
+    #     # r_raw_np = ndimage.rotate(
+    #     #     raw_np[:, :, i*10], -45, reshape=True, order=1, cval=np.mean(seg_np[:, :, i*11])
+    #     # )[2100:3000, 3100:4000]   #[row["x"]:row["x"]+1000, row["y"]:row["y"]+1000]
+
+    #     # ∆ Apply to axes
+    #     axes[i].imshow(r_raw_np, cmap='gray')
+    #     axes[i].set_title(f"Region {i}")
+    #     # axes[i].set_title(f"Elevation z = {i * 11}")
+    #     # axes[i].set_xlabel("Angle [Degree]")
+    #     # axes[i].set_ylabel("Count")
+    #     axes[i].set_axis_off() 
+
     # ∆ Generate figure
-    fig, axes = plt.subplots(3, 6, figsize=(18, 9), dpi=300)
+    fig, axes = plt.subplots(3, 6, figsize=(18, 9), dpi=500)
     axes = axes.flatten()
 
     # ∆ Load region start-points
     iso_df = pd.read_csv("_csv/reg_.csv")
 
-    # ∆ Iterate through regions
     for i, row in iso_df.iterrows():
+        # ∆ Extract and rotate slice
+        slice_ = seg_np[:, :, row["z"]+50]
+        r_seg_np = ndimage.rotate(slice_, -45, reshape=True, order=0)
+        r_seg_np = r_seg_np[row["x"]:row["x"]+1000, row["y"]:row["y"]+1000]
 
-        # # ∆ Isolate rotated component
-        # r_raw_np = ndimage.rotate(
-        #     seg_np[:, :, row["z"]+50], -45, reshape=True, order=1, cval=np.mean(seg_np[:, :, row["z"]+50])
-        # )[2300:3100, :2000]   #[row["x"]:row["x"]+1000, row["y"]:row["y"]+1000]
-
-        # ∆ Isolate rotated component
-        r_raw_np = ndimage.rotate(
-            raw_np[:, :, i*10], -45, reshape=True, order=1, cval=np.mean(seg_np[:, :, i*11])
-        )[2100:3000, 3100:4000]   #[row["x"]:row["x"]+1000, row["y"]:row["y"]+1000]
+        # ∆ Create RGB image (white background, blue for segmentation)
+        rgb = np.ones((*r_seg_np.shape, 3))  # white background
+        rgb[r_seg_np > 0] = [0, 0, 1]        # blue segmentation
 
         # ∆ Apply to axes
-        axes[i].imshow(r_raw_np, cmap='gray')
-        # axes[i].set_title(f"Region {i}")
-        axes[i].set_title(f"Elevation z = {i * 11}")
-        axes[i].set_xlabel("Angle [Degree]")
-        axes[i].set_ylabel("Count")
-        axes[i].set_axis_off() 
+        axes[i].imshow(rgb)
+        axes[i].set_title(f"R{i}")
+        axes[i].set_xticks([])
+        axes[i].set_yticks([])
+        # axes[i].set_axis_off()
 
-    # plt.savefig(f"_png/seg_grid.png", bbox_inches='tight', pad_inches=0.2, dpi=1000)
-    # plt.close()
-    plt.savefig(f"_png/nuc_grid_x.png", bbox_inches='tight', pad_inches=0.2, dpi=1000)
+    plt.savefig(f"_png/seg_grid.png", bbox_inches='tight', pad_inches=0.2, dpi=500)
     plt.close()
 
 
@@ -101,30 +142,66 @@ def reg_images(raw_np, seg_np):
     ids = iso_df["ID"].to_list()
 
     # ∆ Iterate layers
-    for l in [250]:
+    for l in [50, 100, 150, 200, 250]:
 
         # ∆ Rotate data
         r_raw_np = ndimage.rotate(raw_np[:, :, l], -45, reshape=True, order=1, cval=np.mean(raw_np[:, :, l]))
-        # r_seg_np = ndimage.rotate(seg_np[:, :, l], -45, reshape=True, order=1)
+        r_seg_np = ndimage.rotate(seg_np[:, :, l], -45, reshape=True, order=1)
 
-        # ∆ Permute data
-        # for n in ids:
-        #     r_raw_np[r_seg_np > 0] = 255
-        # r_raw_np[:Y_BOUNDS[0], :] = 255
-        # r_raw_np[Y_BOUNDS[1]:, :] = 255
-        # r_raw_np[:, :X_BOUNDS[0]] = 255
-        # r_raw_np[:, X_BOUNDS[1]:] = 255
+        min_val = np.min(r_raw_np)
+        max_val = np.max(r_raw_np)
+
+        if (max_val - min_val) == 0: # Avoid division by zero for uniform images
+            normalized_raw_np = np.zeros_like(r_raw_np, dtype=float) # Or fill with 0.5 for mid-gray
+        else:
+            normalized_raw_np = (r_raw_np - min_val) / (max_val - min_val)
+
+        rgba_image = np.stack([normalized_raw_np, normalized_raw_np, normalized_raw_np, np.ones_like(normalized_raw_np)], axis=-1)
+        red_intensity = 1.0  
+        alpha_overlay = 0.5  
+        mask = r_seg_np > 0
+
+        rgba_image[mask, 0] = red_intensity  # Red channel
+        rgba_image[mask, 1] = 0.0             # Green channel
+        rgba_image[mask, 2] = 0.0             # Blue channel
+        rgba_image[mask, 3] = alpha_overlay   # Alpha channel for the overlay
 
         # ∆ Display images
-        # plt.gca().set_xticks(np.arange(0, int(2545.58*2), 500))
-        # plt.gca().set_yticks(np.arange(0, int(2545.58*2), 500))
-        # plt.grid()
+        plt.figure(figsize=(8, 8)) # Adjust figure size as needed
         plt.ylim(Y_BOUNDS[0], Y_BOUNDS[1])
         plt.xlim(X_BOUNDS[0], X_BOUNDS[1])
         plt.axis('off')
-        plt.imshow(r_raw_np, cmap="gray", origin='lower')
-        plt.savefig(f"_png/ralreg_250.png", bbox_inches='tight', pad_inches=0.2, dpi=1000)
+        plt.imshow(rgba_image, origin='lower') # No cmap needed for RGBA
+        # plt.title(f"Layer {l}") # Optional: Add a title
+        plt.savefig(f"_png/ralreg_{l}.png", bbox_inches='tight', pad_inches=0.2, dpi=1000)
         plt.close()
+
+
+        # # ∆ Rotate data
+        # r_raw_np = ndimage.rotate(raw_np[:, :, l], -45, reshape=True, order=1, cval=np.mean(raw_np[:, :, l]))
+        # r_seg_np = ndimage.rotate(seg_np[:, :, l], -45, reshape=True, order=1)
+
+        # # print(np.max(r_raw_np))
+        # # exit()
+
+        # # ∆ Permute data
+        # for n in ids:
+        #     r_raw_np[r_seg_np > 0] = 10000
+        # # r_raw_np[:Y_BOUNDS[0], :] = 255
+        # # r_raw_np[Y_BOUNDS[1]:, :] = 255
+        # # r_raw_np[:, :X_BOUNDS[0]] = 255
+        # # r_raw_np[:, X_BOUNDS[1]:] = 255
+
+        # # ∆ Display images
+        # # plt.gca().set_xticks(np.arange(0, int(2545.58*2), 500))
+        # # plt.gca().set_yticks(np.arange(0, int(2545.58*2), 500))
+        # # plt.grid()
+        # plt.ylim(Y_BOUNDS[0], Y_BOUNDS[1])
+        # plt.xlim(X_BOUNDS[0], X_BOUNDS[1])
+        # plt.axis('off')
+        # plt.imshow(r_raw_np, cmap="gray", origin='lower')
+        # plt.savefig(f"_png/ralreg_{l}.png", bbox_inches='tight', pad_inches=0.2, dpi=1000)
+        # plt.close()
 
 # ∆ Main function
 def main():
@@ -140,13 +217,13 @@ def main():
     # seg_np = np.load(path).astype(np.uint16)
 
     # ∆ Images
-    # reg_images(raw_np, seg_np)
+    reg_images(raw_np, seg_np)
 
     # ∆ Instance identify
     # instance_id(seg_np)
 
     # ∆ Output region snapshots
-    thumbs(raw_np, seg_np)
+    # thumbs(raw_np, seg_np)
 
 
 # ∆ Initiate

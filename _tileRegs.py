@@ -59,7 +59,6 @@ def main():
         cube_3d = np.stack(stack, axis=2)
         np.save(f"_npy/seg_{i}.npy", cube_3d)
 
-
 # ∆ Initiate
 if __name__ == "__main__":
     main()

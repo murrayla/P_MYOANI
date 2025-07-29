@@ -1,6 +1,0 @@
-tests: ['test']
-m_ref: 1
-test: test, gcc: [1, 11, 10]
-APPLY 20% DISP | val ~ 2200.0
-SOLVED 20% IN:7, True
-wins: ['test']

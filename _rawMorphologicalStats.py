@@ -313,126 +313,6 @@ def validate_data(data, norm_df, iso_df):
     # plt.savefig(f"_png/TILES_PCA.png", bbox_inches='tight', pad_inches=0.2, dpi=1000)
     # plt.close()
 
-    # ∆ Setup visualisation with seaborn style
-    sns.set_style("whitegrid")
-    # ∆ Load region data
-    try:
-        reg_df = pd.read_csv("_csv/reg_.csv")
-    except FileNotFoundError:
-        print("Error: '_csv/reg_.csv' not found. Please ensure the file exists.")
-        # Create dummy data for reg_df for demonstration if file not found
-        reg_df = pd.DataFrame({
-            'z': [0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5], # Example with 18 regions
-            'x': [0, 2, 4, 0, 2, 4, 0, 2, 4, 0, 2, 4, 0, 2, 4, 0, 2, 4],
-            'y': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-        })
-        print(f"Using dummy 'reg_df' with {len(reg_df)} regions for demonstration.")
-
-
-    # ∆ Load norm data (assuming norm_df exists from previous context)
-    try:
-        if 'norm_df' not in locals():
-            norm_df = pd.DataFrame({
-                'Ele_[RAD]': np.random.rand(1000) * 2 * np.pi,
-                'ID': np.arange(1000),
-                'Centroid': [f'[{np.random.rand()*5},{np.random.rand()*5},{np.random.rand()*5}]' for _ in range(1000)]
-            })
-            print("Using dummy 'norm_df' for demonstration. Ensure your actual 'norm_df' is loaded.")
-    except Exception as e:
-        print(f"Error loading or accessing 'norm_df': {e}. Using dummy 'norm_df'.")
-        norm_df = pd.DataFrame({
-            'Ele_[RAD]': np.random.rand(1000) * 2 * np.pi,
-            'ID': np.arange(1000),
-            'Centroid': [f'[{np.random.rand()*5},{np.random.rand()*5},{np.random.rand()*5}]' for _ in range(1000)]
-        })
-
-    # --- Dynamic Subplot Grid Setup ---
-    num_regions = len(reg_df)
-    # Calculate a nearly square grid for subplots
-    ncols = 6 # Keeping 6 columns as in your original setup for consistency
-    nrows = math.ceil(num_regions / ncols)
-    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(3 * ncols, 3 * nrows), squeeze=False) # Use squeeze=False for consistent axes indexing
-
-    # ∆ Define common bins for all histograms
-    num_bins = 20 # You can adjust this number as needed
-    min_azi = norm_df['Ele_[RAD]'].min()
-    max_azi = norm_df['Ele_[RAD]'].max()
-    common_bins = np.linspace(min_azi, max_azi, num_bins + 1) # +1 for bin edges
-
-    # Define a single color for all region histograms
-    single_color = '#FAA52B' # Or 'lightcoral', 'teal', 'mediumseagreen', etc.
-
-    # ∆ Iterate through each region and plot its histogram on a dedicated subplot
-    for i, r in reg_df.iterrows():
-        row_idx = i // ncols
-        col_idx = i % ncols
-        ax = axes[row_idx, col_idx]
-
-        ang_reg_df = pd.DataFrame()
-        for _, row in norm_df.iterrows():
-
-            if row["ID"] in EXCLUSION:
-                continue
-
-            # ∆ Load centroid data
-            try:
-                ori = np.array(ast.literal_eval(row["Centroid"]))
-            except (ValueError, SyntaxError) as e:
-                # print(f"Warning: Could not parse Centroid '{row['Centroid']}'. Skipping row. Error: {e}")
-                continue
-
-            if len(ori) != 3:
-                # print(f"Warning: Centroid '{row['Centroid']}' does not have 3 dimensions. Skipping row.")
-                continue
-
-            vx, vy, vz = ori
-
-            # ∆ Rotate data to determine if within desired region
-            s_vx = vx - cx
-            s_vy = vy - cy
-            n45 = -np.pi / 4
-            rot = np.array([
-                [np.cos(n45), -np.sin(n45)],
-                [np.sin(n45), np.cos(n45)]
-            ])
-            s_rx, s_ry = np.dot(rot, [s_vx, s_vy])
-            rx = s_rx + M_D
-            ry = s_ry + M_D
-
-            # ∆ Check if within region based on transformed coordinates and z
-            if (rx <= r["x"] + CUBE["x"] and rx >= r["x"]) and \
-            (ry <= r["y"] + CUBE["y"] and ry >= r["y"]) and \
-            (vz <= r["z"] + CUBE["z"] and vz >= r["z"]):
-                ang_reg_df = pd.concat([ang_reg_df, pd.DataFrame({'Ele_[RAD]': [row["Ele_[RAD]"]]})], ignore_index=True)
-
-        # ∆ Plot the histogram for the current region
-        if not ang_reg_df.empty:
-            sns.histplot(ang_reg_df['Ele_[RAD]'], ax=ax, stat='density', edgecolor='black', alpha=0.7, bins=common_bins,
-                        color=single_color)
-        else:
-            ax.text(0.5, 0.5, 'No data in this region', ha='center', va='center', transform=ax.transAxes, fontsize=10, color='red')
-            print(f"No data found for region: z={r['z']}, x={r['x']}, y={r['y']}")
-
-
-        # ∆ Axis and title setup for each subplot
-        ax.set_xlabel('Angle [rad]' if row_idx == nrows - 1 else '') # Only label x-axis on bottom row
-        ax.set_ylabel('Proportion' if col_idx == 0 else '') # Only label y-axis on left-most column
-        ax.set_title(f'Region: z={r["z"]}, x={r["x"]}, y={r["y"]}', fontsize=10)
-
-
-    # ∆ Hide any unused subplots
-    for i in range(num_regions, nrows * ncols):
-        row_idx = i // ncols
-        col_idx = i % ncols
-        fig.delaxes(axes[row_idx, col_idx])
-
-    plt.tight_layout(rect=[0, 0, 1, 0.96]) # Adjust layout to make space for suptitle if needed
-    fig.suptitle('Ele_[RAD] Distribution by Region (Uniform Bins)', fontsize=16, y=1.02) # Overall title
-
-
-    plt.savefig(f"_png/SINGLE_HIST_AZI_OVERLAY_UNIFORM_BINS.png", bbox_inches='tight', pad_inches=0.2, dpi=1000)
-    plt.close()
-
 # ∆ Standardise data and convert into Degrees
 def norm_data(zst_df):
 
@@ -541,24 +421,32 @@ def deep_stats(data, iso_df):
     }
     inc_labs = iso_df["ID"].to_numpy()
 
+    ids_7 = pd.read_csv("_csv/tile_7_w.png")["ID"].to_numpy()
+
     # ∆ Loop labeled data
     for lab in props:
 
         # ∆ Apply properties to dictionary
         # µ Label data
         val = lab.label
-        if val not in inc_labs:
+        # if val not in inc_labs:
+        #     continue
+        if val not in ids_7:
             continue
-        if lab.area < Z_DISC:
+        # if lab.area < Z_DISC:
+        #     continue
+
+        if val != 1456:
             continue
-        props_dict["ID"].append(val)
-        # µ Numpy of pixels 
-        props_dict["Pixels"].append(lab.num_pixels)
-        # µ Ratio of pixels to Z-Disc average volume
-        props_dict["ZDiscs"].append(lab.num_pixels // Z_DISC)
-        # µ Centroid data
-        vx, vy, vz = list(map(float, lab.centroid))
-        props_dict["Centroid"].append([vx, vy, vz])
+        
+        # props_dict["ID"].append(val)
+        # # µ Numpy of pixels 
+        # props_dict["Pixels"].append(lab.num_pixels)
+        # # µ Ratio of pixels to Z-Disc average volume
+        # props_dict["ZDiscs"].append(lab.num_pixels // Z_DISC)
+        # # µ Centroid data
+        # vx, vy, vz = list(map(float, lab.centroid))
+        # props_dict["Centroid"].append([vx, vy, vz])
         
         # ∆ Pixel indexes
         idxs = np.argwhere(data == val)
@@ -569,9 +457,9 @@ def deep_stats(data, iso_df):
         pca.fit(mu_idxs)
         
         # ∆ Attach principal components
-        props_dict["PC1"].append(pca.components_[0])
-        props_dict["PC2"].append(pca.components_[1])
-        props_dict["PC3"].append(pca.components_[2])
+        # props_dict["PC1"].append(pca.components_[0])
+        # props_dict["PC2"].append(pca.components_[1])
+        # props_dict["PC3"].append(pca.components_[2])
 
         fig = plt.figure(figsize=(10, 8))
         ax = fig.add_subplot(111, projection='3d')
@@ -593,33 +481,178 @@ def deep_stats(data, iso_df):
                     label=labels[i])
             
         ax.legend()
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        ax.set_zlabel('Z')
+        ax.set_xlabel('X [pxls]')
+        ax.set_ylabel('Y [pxls]')
+        ax.set_zlabel('Z [pxls]')
+        ax.set_title(f"Z-Disc: {val}")
         plt.show()
         plt.savefig(f"_png/PCA_Raw.png", bbox_inches='tight', pad_inches=0.2, dpi=1000)
         plt.close()
         exit()
 
-        # ∆ Find angles from third component
-        np90 = np.pi/2
-        p3 = pca.components_[2]
-        px, py, pz = p3
-        # µ azimuthial (angle of rotation about z)
-        azi = np.arctan2(py, px if px > 0 else -px)
-        props_dict["Azi_[RAD]"].append(np90+(-azi if azi < 0 else azi))
-        # µ elevation (angle of rotation about y)
-        ele = np.arctan2(pz, px if px > 0 else -px)
-        props_dict["Ele_[RAD]"].append(ele if ele < 0 else -ele)
-        # µ spherical angle
-        sph = np.arccos(np.abs(px))
-        props_dict["Sph_[RAD]"].append(sph)
+        # # ∆ Find angles from third component
+        # np90 = np.pi/2
+        # p3 = pca.components_[2]
+        # px, py, pz = p3
+        # # µ azimuthial (angle of rotation about z)
+        # azi = np.arctan2(py, px if px > 0 else -px)
+        # props_dict["Azi_[RAD]"].append(np90+(-azi if azi < 0 else azi))
+        # # µ elevation (angle of rotation about y)
+        # ele = np.arctan2(pz, px if px > 0 else -px)
+        # props_dict["Ele_[RAD]"].append(ele if ele < 0 else -ele)
+        # # µ spherical angle
+        # sph = np.arccos(np.abs(px))
+        # props_dict["Sph_[RAD]"].append(sph)
 
     # ∆ Save
-    df = pd.DataFrame(props_dict)
-    df.to_csv("_csv/iso_stats.csv", index=False)
+    # df = pd.DataFrame(props_dict)
+    # df.to_csv("_csv/iso_stats.csv", index=False)
 
-    return df
+    # return df
+
+
+# ∆ Plot the PCs 
+def pc_seg(data):
+
+    # ∆ Dummy slice for calculating shape data
+    dummy = np.ones_like(data)
+    h, w, d = dummy.shape
+    cx, cy = (w-1)/2, (h-1)/2
+    dummy = []
+
+    # ∆ Read in required IDs to plot
+    reg_df = pd.read_csv("_csv/tile_7_w.csv")
+    reg_id = reg_df["ID"].to_numpy()
+
+    # # ∆ Setup plot
+    # fig = plt.figure(figsize=(10, 8))
+    # ax = fig.add_subplot(111, projection='3d')
+
+    # # ∆ Formatting 
+    # colors = ["#A98BFF", "#FAA52B", "#7EDAFF"]
+    # labels = ['PC1', 'PC2', 'PC3']
+
+    # # ∆ Iterate IDs
+    # for j, val in enumerate(reg_id):
+
+    #     # ∆ Pixel indexes
+    #     idxs = np.argwhere(data == val)
+    #     mu_idxs = idxs * np.array([PIXX, PIXY, PIXZ])
+    #     # ax.scatter(mu_idxs[::100, 0], mu_idxs[::100, 1], mu_idxs[::100, 2], alpha=0.5, color="red")
+
+    #     vx, vy, vz = np.mean(mu_idxs[:, 0]), np.mean(mu_idxs[:, 1]), np.mean(mu_idxs[:, 2])
+
+    #     # ∆ Rotate data to determine if wihtin desired region
+    #     s_vx = vx - cx
+    #     s_vy = vy - cy
+    #     n45 = -np.pi/4
+    #     rot = np.array([
+    #         [np.cos(n45), -np.sin(n45)],
+    #         [np.sin(n45),  np.cos(n45)]
+    #     ])
+    #     s_rx, s_ry = np.dot(rot, [s_vx, s_vy])
+    #     rx = s_rx + M_D
+    #     ry = s_ry + M_D
+    #     ori = np.array([rx, ry, vz])
+
+    #     scatter_color = plt.cm.viridis(j / len(reg_id))
+    #     rot_idxs = np.concatenate([(rot @ mu_idxs[:, :2].T).T, mu_idxs[:, 2][:, np.newaxis]], axis=1)
+    #     ax.scatter(rot_idxs[::100, 0], rot_idxs[::100, 1], rot_idxs[::100, 2], alpha=0.1, color="black")
+
+    #     # ∆ Principal Components Analysis
+    #     pca = PCA(n_components=3)
+    #     pca.fit(rot_idxs)
+    #     origin = pca.mean_
+
+    #     # ∆ plot components
+    #     for i, (length, vector) in enumerate(zip(pca.explained_variance_, pca.components_)):
+    #         if i == 0:
+    #             l = np.sqrt(length) * 2
+    #         if i != 2:
+    #             continue
+    #         v = vector * l
+    #         start = origin - v
+    #         end = origin + v
+    #         if not j:
+    #             ax.plot([start[0], end[0]], [start[1], end[1]], [start[2], end[2]],
+    #                     color=colors[i], linewidth=5, label=labels[i], alpha=1)
+    #         else:
+    #             ax.plot([start[0], end[0]], [start[1], end[1]], [start[2], end[2]],
+    #                     color=colors[i], linewidth=5, alpha=1)
+                
+    #     # if not j: break
+                
+    # ax.legend()
+    # ax.set_xlabel('X')
+    # ax.set_ylabel('Y')
+    # ax.set_zlabel('Z')
+    # ax.set_title("Region 7 [PCA]")
+    # ax.view_init(elev=20, azim=-60)
+    # plt.show()
+    # plt.savefig(f"_png/reg_pca.png", bbox_inches='tight', pad_inches=0.2, dpi=500)
+    # plt.close()
+
+    # ∆ Setup plot
+    fig = plt.figure(figsize=(10, 10))
+    ax = fig.add_subplot(111)
+
+    # ∆ Formatting 
+    colors = ["#A98BFF", "#FAA52B", "#7EDAFF"]
+    labels = ['PC1', 'PC2', 'PC3']
+
+    # ∆ Iterate IDs
+    for j, val in enumerate(reg_id):
+
+        # ∆ Pixel indexes
+        idxs = np.argwhere(data == val)
+        mu_idxs = idxs * np.array([PIXX, PIXY, PIXZ])
+        # ax.scatter(mu_idxs[::100, 0], mu_idxs[::100, 1], mu_idxs[::100, 2], alpha=0.5, color="red")
+
+        # ∆ Rotate data to determine if wihtin desired region
+        n45 = -np.pi/4
+        rot = np.array([
+            [np.cos(n45), -np.sin(n45)],
+            [np.sin(n45),  np.cos(n45)]
+        ])
+
+        rot_idxs = np.concatenate([(rot @ mu_idxs[:, :2].T).T, mu_idxs[:, 2][:, np.newaxis]], axis=1)
+        ax.scatter(rot_idxs[::100, 0], rot_idxs[::100, 1], alpha=0.1, color="black")
+
+        # ∆ Principal Components Analysis
+        pca = PCA(n_components=3)
+        pca.fit(rot_idxs)
+        origin = pca.mean_
+
+        # ∆ plot components
+        for i, (length, vector) in enumerate(zip(pca.explained_variance_, pca.components_)):
+            if i == 0:
+                l = np.sqrt(length) * 2
+            if i != 2:
+                continue
+            # Normalize and scale to uniform length
+            unit_vector = vector / np.linalg.norm(vector)
+            scaled_vector = unit_vector * 1000
+
+            # Quiver plot from the origin
+            ax.quiver(origin[0], origin[1], scaled_vector[0], scaled_vector[1],
+                    angles='xy', scale_units='xy', scale=1,
+                    color=colors[i], label=labels[i], linewidth=10)
+            # v = vector * l
+            # start = origin - v
+            # end = origin + v
+            # ax.plot([start[0], end[0]], [start[1], end[1]],
+            #         color=colors[i], linewidth=5, label=labels[i], alpha=1)
+            # ax.quiver(start[0], start[1], end[0], end[1], color=colors[i], linewidth=5, edgecolor='black', scale=100)
+
+        # break
+                
+    ax.set_title("Region 7 [PCA]")
+    ax.set_axis_off()
+    plt.savefig(f"_png/reg_pca_2D.png", bbox_inches='tight', pad_inches=0.2, dpi=500)
+    plt.close()
+
+
+"""ES-BB6F4BFF8125"""
 
 # ∆ Isolate Segmentations
 def isolate_segs(data):
@@ -677,7 +710,7 @@ def main(seg_np):
     # iso_df = isolate_segs(seg_np)
 
     # # ∆ Determine statistical data
-    # reg_df = pd.read_csv("_csv/reg_stats.csv")
+    # reg_df = pd.read_csv("_csv/reg_stats_whole.csv")
     # deep_stats(seg_np, reg_df)
 
     # # ∆ Standardise
@@ -685,22 +718,23 @@ def main(seg_np):
     # norm_data(iso_df)
 
     # ∆ Validation plot
-    norm_df = pd.read_csv("_csv/norm_stats_whole.csv")
+    # norm_df = pd.read_csv("_csv/norm_stats.csv")
     # validate_data(seg_np, norm_df, iso_df)
 
     # ∆ Save a rotated dataset
-    rot_data(seg_np, norm_df)
+    # rot_data(seg_np, norm_df)
 
     # ∆ Tile dataset
-    tile_data(seg_np, norm_df)
+    # tile_data(seg_np, norm_df)
+
+    # ∆ Display Segs and PCs
+    pc_seg(seg_np)
 
 # ∆ Inititate
 if __name__ == "__main__":
 
     # ∆ Load data
-    # path = os.path.join(os.path.dirname(__file__), RAW_SEG)
-    # seg_np = np.load(path).astype(np.uint16)
-    seg_np = np.load("/Users/murrayla/Documents/main_PhD/BIG_SEG/filtered.npy").astype(np.uint16)
+    seg_np = np.load("/Users/murrayla/Documents/main_PhD/BIG_SEG/filtered.npy").astype(np.uint16)[:2000, 1000:4000, 90:210]
 
     # ∆ Open main
     main(seg_np)
