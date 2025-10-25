@@ -1,93 +1,97 @@
-# Standard library imports
-import random
+"""
+    Author: Murray, L, A.
+    Contact: murrayla@student.unimelb.edu.au
+             liam.a.murr@gmail.com
+    ORCID: https://orcid.org/0009-0003-9276-6627
+    File Name: _Sim.py
+       finite element simulation with FENICS
+"""
 
-# Third-party library imports
+# ∆ Raw
+import random
+import argparse
 import numpy as np
 import pandas as pd
 from scipy.spatial import KDTree
-import matplotlib.pyplot as plt # Added for plotting
-import seaborn as sns         # Added for plotting
+import matplotlib.pyplot as plt
 
-# DolfinX related imports
+# ∆ Dolfin
 import ufl
 from mpi4py import MPI
 from petsc4py import PETSc
 from basix.ufl import element, mixed_element
-from dolfinx import default_scalar_type, io, log
-from dolfinx.fem import Constant, Expression, Function, functionspace, dirichletbc, locate_dofs_topological
+from dolfinx import log, io,  default_scalar_type
+from dolfinx.fem import Function, functionspace, dirichletbc, locate_dofs_topological, Expression, Constant
 from dolfinx.fem.petsc import NonlinearProblem
 from dolfinx.nls.petsc import NewtonSolver
 
-# Seed for reproducibility
+# ∆ Seed
 random.seed(17081993)
 
-# Global Constants
-DIM = 3               # Dimension of the problem (e.g., 3 for 3D)
-ORDER = 2             # Polynomial order for function spaces
-TOL = 1e-5            # Solver tolerance
-QUADRATURE = 4        # Quadrature degree for numerical integration
-RADIUS = 1000         # Radius for sphere-based stress calculation
-
-# Indices for coordinate axes
+# ∆ Global Constants
+DIM = 3
+ORDER = 2 
+TOL = 1e-5
+Z_TOL = 50
+RADIUS = 1000
+QUADRATURE = 4
 X, Y, Z = 0, 1, 2
-# Pixel dimensions (used for scaling segmentation data)
 PIXX, PIXY, PIXZ = 11, 11, 50
-PXLS = {"x": 11, "y": 11, "z": 50} # Dictionary for pixel dimensions
-# Cube dimensions (likely in physical units)
+PXLS = {"x": 11, "y": 11, "z": 50}
 CUBE = {"x": 1000, "y": 1000, "z": 100}
-# Calculated edge lengths of the domain
-EDGE = [PXLS[d] * CUBE[d] for d in ["x", "y", "z"]]
+EDGE = [PXLS[d]*CUBE[d] for d in ["x", "y", "z"]]
 
-
-# Smooth data globally
+# ∆ Smooth data globally
 def global_smooth(coords, data):
-    """Applies global smoothing to data using a Gaussian kernel."""
 
     tol = 1e-8
-    sx, sy, sz = 1000, 500, 500 # Standard deviations for weighting
+    # ∆ Set standard deviations
+    sx, sy, sz = 1000, 500, 500
 
-    tree = KDTree(coords) # Nearest neighbour tree
+    # ∆ Nearest neighbour tree
+    tree = KDTree(coords)
 
-    s_data = np.zeros_like(data) # Store new data
-    mask = (data != 0).astype(float) # Mask for non-zero data
+    # ∆ Store new data and mask
+    s_data = np.zeros_like(data)
+    mask = (data != 0).astype(float)
 
-    for i in range(len(coords)): # Iterate through data points
-        kn_idx = tree.query_ball_point(coords[i], r=2*sx) # Find neighbours
+    # ∆ Iterate data and store 
+    for i in range(0, len(coords), 1):
 
+        # ∆ Create neighbours
+        kn_idx = tree.query_ball_point(coords[i], r=2*sx)
+
+        # ∆ Assign values
         knn = coords[kn_idx]
         vals = data[kn_idx]
         knn_mask = mask[kn_idx]
 
-        # Compute distances
+        # ∆ Compute distances
         dx = knn[:, 0] - coords[i, 0]
         dy = knn[:, 1] - coords[i, 1]
         dz = knn[:, 2] - coords[i, 2]
 
-        # Compute Gaussian weights
+        # ∆ Compute weights
         wei = np.exp(-0.5 * ((dx / sx)**2 + (dy / sy)**2 + (dz / sz)**2))
 
-        # Apply mask to weighted data and mask sums
+        # ∆ Mask weight data
         w_data = wei * vals * knn_mask
         w_mask = wei * knn_mask
 
-        # Store smoothed value
-        if w_mask.sum() > tol:
+        # ∆ Store
+        if w_mask.sum() > tol: 
             s_data[i] = w_data.sum() / (w_mask.sum() + tol)
         else:
             s_data[i] = 0.0
 
     return s_data
 
-
-# Assign angles to dofs
+# ∆ Assign angles to dofs
 def angle_assign(t, coords):
-    """
-    Assigns orientation angles (azimuth, elevation) and a Z-disc indicator
-    to mesh coordinates based on segmentation data.
-    """
-    # Create arrays for angles, Z-disc indicator, and normal vectors
+
+    # ∆ Create arrays
     azi = np.zeros_like(coords[:, 0])
-    ele = np.zeros_like(coords[:, 0])
+    ele = np.zeros_like(coords[:, 0]) 
     sph = np.zeros_like(coords[:, 0])
     zid = np.zeros_like(coords[:, 0])
     zs = np.zeros_like(coords[:, 0])
@@ -96,57 +100,61 @@ def angle_assign(t, coords):
     if t == "test":
         return azi, ele, zs
 
-    # Load tile data and unique IDs
+    # ∆ Load tile data and reduce to only unique IDs
     data_df = pd.read_csv(f"_csv/norm_stats_whole.csv")
     uni = data_df["ID"].to_list()
 
-    # Load segmentation data
+    # ∆ Load segmentation 
     data = np.load(f"_npy/seg_{t}.npy").astype(np.uint16)
     data = np.transpose(data, (1, 0, 2))
 
-    # Scale segmentation indices to match physical dimensions
+    # ∆ Scale and move data
     scale = np.array([PIXX, PIXY, PIXZ])
     idxs = np.argwhere(data >= 0)
     m_idxs = idxs * scale
 
-    # Generate nearest neighbours trees for segmentation data and mesh nodes
+    # ∆ Generate nearest neighbours tree
     knn = KDTree(m_idxs)
     node_tree = KDTree(coords)
 
-    # Distance parameters for neighbor search and extension
+    # ∆ Distance parameters
     tol_dist = 1000
     sar_dist = 1400
-    s_step = 200
+    s_step = 200 
 
-    # Determine matching points between mesh coordinates and segmentation data
+    # ∆ Determine matching
     dist, idx = knn.query(coords, distance_upper_bound=tol_dist)
 
-    # Iterate through the distances and indices to assign angles
-    for i, (dist_val, seg_idx) in enumerate(zip(dist, idx)):
-        if dist_val >= tol_dist: # Skip if outside tolerance distance
+    # ∆ Iterate through the distances and indices
+    for i, (dist, ii) in enumerate(zip(dist, idx)):
+
+        # ∆ Check if tolerance distance is appreciated
+        if dist >= tol_dist:
             continue
 
-        # Get 3D position and ID from segmentation data
-        ix, iy, iz = m_idxs[seg_idx, :]
-        seg_id = data[ix // PIXX, iy // PIXY, iz // PIXZ]
+        # ∆ Generate 3D position for ID value
+        ix, iy, iz = m_idxs[ii, :]
+        id = data[ix // PIXX, iy // PIXY, iz // PIXZ]
 
-        if not seg_id or seg_id not in uni: # Check if ID is valid and included
+        # ∆ Check if ID is included
+        if not id or id not in uni:
             continue
 
-        # Assign angle values from loaded data
-        azi_val = data_df.loc[data_df["ID"] == seg_id, "Azi_[RAD]"].values[0]
-        ele_val = data_df.loc[data_df["ID"] == seg_id, "Ele_[RAD]"].values[0]
-        sph_val = data_df.loc[data_df["ID"] == seg_id, "Sph_[DEG]"].values[0]
+        # ∆ Assign angle values
+        azi_val = data_df.loc[data_df["ID"] == id, "Azi_[RAD]"].values[0]
+        ele_val = data_df.loc[data_df["ID"] == id, "Ele_[RAD]"].values[0]
+        sph_val = data_df.loc[data_df["ID"] == id, "Sph_[DEG]"].values[0]
 
-        # Calculate vector in direction of angles and normalize
+        # ∆ Calculate vector in direction of angles
         nvec = np.array([
             ufl.cos(azi_val) * ufl.cos(ele_val),
             ufl.sin(azi_val) * ufl.cos(ele_val),
             -ufl.sin(ele_val)
         ])
-        nvec /= np.linalg.norm(nvec) # Normalize vector
+        # µ Normalise
+        nvec /= np.linalg.norm(nvec)
 
-        # Assign values at the current mesh node and its neighbors
+        # ∆ Assign at centre first
         pt = coords[i]
         kn_idx = node_tree.query_ball_point(pt, r=500)
         zs[kn_idx] = 1
@@ -156,14 +164,18 @@ def angle_assign(t, coords):
         nvecs[kn_idx] = nvec
         zid[kn_idx] = 1
 
-        # Extend assignment along directions of interest
+        # ∆ Extend along directions of interest
         for a in np.linspace(-1, 1, s_step):
-            pt_extended = coords[i] + a * sar_dist * nvec # Calculate extended point
-            kn_idx_extended = node_tree.query_ball_point(pt_extended, r=500) # Find new points
 
-            # Assign values to extended neighbors
-            for j in kn_idx_extended:
-                if not(a): # Only set zs if 'a' is zero (central point)
+            # ∆ Calculate point
+            pt = coords[i] + a * sar_dist * nvec
+
+            # ∆ Find new points
+            kn_idx = node_tree.query_ball_point(pt, r=500)
+
+            # ∆ Assign values
+            for j in kn_idx:
+                if not(a):
                     zs[j] = 1
                 azi[j] = azi_val
                 ele[j] = ele_val
@@ -171,17 +183,17 @@ def angle_assign(t, coords):
                 nvecs[j] = nvec
                 zid[j] = 1
 
-    # Apply global smoothing to the assigned angles
+    # ∆ Global smoothing
     azi = global_smooth(coords, azi)
     ele = global_smooth(coords, ele)
     sph = global_smooth(coords, sph)
 
-    # Define a final smoothing pass helper function
+    # ∆ Final smoothing 
     def final_pass(coords, data):
         tol = 1e-8
         sx, sy, sz = 500, 500, 500
         s_data = np.zeros_like(data)
-        for i in range(len(coords)):
+        for i in range(0, len(coords), 1):
             dx = coords[:, 0] - coords[i, 0]
             dy = coords[:, 1] - coords[i, 1]
             dz = coords[:, 2] - coords[i, 2]
@@ -189,247 +201,155 @@ def angle_assign(t, coords):
             wei /= wei.sum() + tol
             s_data[i] = np.sum(wei * data)
         return s_data
-
-    # Apply final smoothing pass
+    
+    # ∆ Simple smoothing
     azi = final_pass(coords, azi)
     ele = final_pass(coords, ele)
     sph = final_pass(coords, sph)
 
     return azi, ele, zs
 
-
-def compute_principal_stresses(stress_components: np.ndarray) -> np.ndarray:
-    """
-    Computes the principal stresses (eigenvalues) from a 3D symmetric stress tensor.
-
-    Args:
-        stress_components (np.ndarray): A (N, 6) array where N is the number of points,
-                                        and the 6 columns are [s_xx, s_xy, s_xz, s_yy, s_yz, s_zz].
-                                        Note: The input r_sig is ordered [s_xx, s_xy, s_xz, s_yx, s_yy, s_yz, s_zx, s_zy, s_zz]
-                                        so we need to map it correctly.
-
-    Returns:
-        np.ndarray: A (N, 3) array containing the three principal stresses for each point,
-                    sorted in descending order (sigma_1, sigma_2, sigma_3).
-    """
-    num_points = stress_components.shape[0]
-    principal_stresses = np.zeros((num_points, 3))
-
-    for i in range(num_points):
-        # Extract components from the flattened 9-component array (r_sig)
-        # r_sig[:, 0] -> sig_xx
-        # r_sig[:, 1] -> sig_xy
-        # r_sig[:, 2] -> sig_xz
-        # r_sig[:, 4] -> sig_yy
-        # r_sig[:, 5] -> sig_yz
-        # r_sig[:, 8] -> sig_zz
-        s_xx = stress_components[i, 0]
-        s_xy = stress_components[i, 1]
-        s_xz = stress_components[i, 2]
-        s_yy = stress_components[i, 4]
-        s_yz = stress_components[i, 5]
-        s_zz = stress_components[i, 8]
-
-        # Construct the symmetric stress tensor for the current point
-        stress_tensor = np.array([
-            [s_xx, s_xy, s_xz],
-            [s_xy, s_yy, s_yz],
-            [s_xz, s_yz, s_zz]
-        ])
-
-        # Compute eigenvalues (principal stresses)
-        # eigvalsh is for symmetric matrices, which stress tensors are
-        eigenvalues = np.linalg.eigvalsh(stress_tensor)
-
-        # Sort eigenvalues in descending order (sigma_1 >= sigma_2 >= sigma_3)
-        principal_stresses[i, :] = np.sort(eigenvalues)[::-1]
-
-    return principal_stresses
-
-
-def plot_stress_distributions(df: pd.DataFrame, t: str, kk: int):
-    """
-    Generates and saves histograms for Cauchy sig_xx and the maximum principal stress.
-
-    Args:
-        df (pd.DataFrame): DataFrame containing stress results.
-        t (str): Test case identifier.
-        kk (int): Current load step percentage.
-    """
-    sns.set_style("whitegrid")
-    fig, axes = plt.subplots(1, 2, figsize=(14, 6), dpi=150)
-    fig.suptitle(f"Stress Distributions for Test '{t}' at {kk}% Strain", fontsize=16)
-
-    # Plot histogram for sig_xx
-    sns.histplot(df['sig_xx'], kde=True, ax=axes[0], color='skyblue', bins=50)
-    axes[0].set_title(r'$\sigma_{xx}$ Distribution')
-    axes[0].set_xlabel('Stress [kPa]')
-    axes[0].set_ylabel('Frequency')
-
-    # Plot histogram for max principal stress (sig_p1)
-    sns.histplot(df['sig_p1'], kde=True, ax=axes[1], color='lightcoral', bins=50)
-    axes[1].set_title(r'Max Principal Stress ($\sigma_1$) Distribution')
-    axes[1].set_xlabel('Stress [kPa]')
-    axes[1].set_ylabel('Frequency')
-
-    plt.tight_layout(rect=[0, 0, 1, 0.95]) # Adjust layout to make space for suptitle
-    plt.savefig(f"_png/stress_dist_{t}_{kk}.png", bbox_inches="tight")
-    plt.close(fig) # Close the figure to free up memory
-
-
-# Fenics simulation
+# ∆ Fenics simulation
 def fx_(t, file, gcc, r):
-    """
-    Performs a FenicsX non-linear solid mechanics simulation with anisotropic
-    material properties.
 
-    Args:
-        t (str): Test case identifier.
-        file (str): Path to the mesh file.
-        gcc (list): Global constitutive constants [b0, bf, bt].
-        r (int): Refinement parameter, used for output file naming.
-
-    Returns:
-        tuple: (num_iterations, status_code) where status_code is 1 for success, -1 for failure.
-    """
-    # Load mesh data and set up function spaces
+    # ∆ Load mesh data and set up function spaces
     domain, _, ft = io.gmshio.read_from_msh(filename=file, comm=MPI.COMM_WORLD, rank=0, gdim=DIM)
     P2 = element("Lagrange", domain.basix_cell(), ORDER, shape=(domain.geometry.dim,))
-    P1 = element("Lagrange", domain.basix_cell(), ORDER - 1)
+    P1 = element("Lagrange", domain.basix_cell(), ORDER-1)
     Mxs = functionspace(mesh=domain, element=mixed_element([P2, P1]))
     Tes = functionspace(mesh=domain, element=("Lagrange", ORDER, (DIM, DIM)))
 
-    # Define subdomains (collapsed function spaces for displacement and pressure)
+    # ∆ Define subdomains
     V, _ = Mxs.sub(0).collapse()
     P, _ = Mxs.sub(1).collapse()
 
-    # Determine coordinates of space and create mapping tree
+    # ∆ Determine coordinates of space and create mapping tree
     x_n = Function(V)
-    # Initial DOF coordinates are static for the simulation, so compute once
     coords = np.array(x_n.function_space.tabulate_dof_coordinates()[:])
     tree = KDTree(coords)
 
-    # Setup functions for assignment
+    # ∆ Setup functions for assignment
     ori, z_data = Function(V), Function(V)
 
-    # Assign angle and z-disc data
+    # ∆ Assign angle and z-disc data
     azi, ele, zs = angle_assign(t, coords)
 
-    # Store cosine and sine components of angles
+    # ∆ Store angles
     CA, CE = np.cos(azi), np.cos(ele)
     SA, SE = np.sin(azi), np.sin(ele)
 
-    # Create interpolate functions for basis vectors
+    # ∆ Create interpolate functions
+    # µ Basis vector 1
     def nu_1(phi_xyz):
         _, idx = tree.query(phi_xyz.T, k=1)
-        return np.array([CA[idx] * CE[idx], SA[idx] * CE[idx], -SE[idx]])
-
+        return np.array([CA[idx]*CE[idx], SA[idx]*CE[idx], -SE[idx]])
+    # µ Basis vector 2
     def nu_2(phi_xyz):
         _, idx = tree.query(phi_xyz.T, k=1)
         return np.array([-SA[idx], CA[idx], np.zeros_like(CA[idx])])
-
+    # µ Basis vector 3
     def nu_3(phi_xyz):
         _, idx = tree.query(phi_xyz.T, k=1)
-        return np.array([CA[idx] * SE[idx], SA[idx] * SE[idx], CE[idx]])
+        return np.array([CA[idx]*SE[idx], SA[idx]*SE[idx], CE[idx]])
 
-    # Create z_disc id data
+    # ∆ Create z_disc id data
     z_arr = z_data.x.array.reshape(-1, 3)
     z_arr[:, 0], z_arr[:, 1], z_arr[:, 2] = zs, azi, ele
     z_data.x.array[:] = z_arr.reshape(-1)
 
-    # Create angular orientation vector
+    # ∆ Create angular orientation vector
     ori.interpolate(nu_1)
 
-    # Create push tensor function
+    # ∆ Create push tensor function
     Push = Function(Tes)
 
-    # Define push interpolation (Forward transform)
+    # ∆ Define push interpolation
     def forward(phi_xyz):
         _, idx = tree.query(phi_xyz.T, k=1)
-        f00, f01, f02 = CA[idx] * CE[idx], -SA[idx], CA[idx] * SE[idx]
-        f10, f11, f12 = SA[idx] * CE[idx], CA[idx], SA[idx] * SE[idx]
+        f00, f01, f02 = CA[idx]*CE[idx], -SA[idx], CA[idx]*SE[idx]
+        f10, f11, f12 = SA[idx]*CE[idx], CA[idx], SA[idx]*SE[idx]
         f20, f21, f22 = -SE[idx], np.zeros_like(CE[idx]), CE[idx]
         return np.array([f00, f01, f02, f10, f11, f12, f20, f21, f22])
 
-    # Interpolate Push as Forward transform
+    # ∆ Interpolate Push as Forward transform
     Push.interpolate(forward)
 
-    # Load key function variables for mixed space
+    # ∆ Load key function variables
     mx = Function(Mxs)
     v, q = ufl.TestFunctions(Mxs)
     u, p = ufl.split(mx)
     u_nu = Push * u
 
-    # Kinematics Setup
-    i, j, k, l, a, b = ufl.indices(6)
-    I = ufl.Identity(DIM)
+    # ∆ Kinematics Setup
+    i, j, k, l, a, b = ufl.indices(6)  
+    I = ufl.Identity(DIM)  
     F = ufl.variable(I + ufl.grad(u_nu))
 
-    # Metric tensors
-    # Underformed Covariant basis vectors
+    # ∆ Metric tensors
+    # µ [UNDERFORMED] Covariant basis vectors 
     A1, A2, A3 = Function(V), Function(V), Function(V)
-    A1.interpolate(nu_1) # Create base 1
-    A2.interpolate(nu_2) # Create base 2
-    A3.interpolate(nu_3) # Create base 3
-
-    # Underformed Metric tensors
+    # ¬ create base 1
+    A1.interpolate(nu_1)
+    # ¬ create base 2
+    A2.interpolate(nu_2)
+    # ¬ create base 3
+    A3.interpolate(nu_3)
+    
+    # µ [UNDERFORMED] Metric tensors
     G_v = ufl.as_tensor([
         [ufl.dot(A1, A1), ufl.dot(A1, A2), ufl.dot(A1, A3)],
         [ufl.dot(A1, A2), ufl.dot(A2, A2), ufl.dot(A2, A3)],
         [ufl.dot(A1, A3), ufl.dot(A2, A3), ufl.dot(A3, A3)]
-    ])
-    G_v_inv = ufl.inv(G_v)
-    # Deformed Metric covariant tensors
+    ]) 
+    G_v_inv = ufl.inv(G_v)  
+    # µ [DEFORMED] Metric covariant tensors
     g_v = ufl.as_tensor([
         [ufl.dot(F * A1, F * A1), ufl.dot(F * A1, F * A2), ufl.dot(F * A1, F * A3)],
         [ufl.dot(F * A2, F * A1), ufl.dot(F * A2, F * A2), ufl.dot(F * A2, F * A3)],
         [ufl.dot(F * A3, F * A1), ufl.dot(F * A3, F * A2), ufl.dot(F * A3, F * A3)]
     ])
+    g_v_inv = ufl.inv(g_v)
 
-    # Christoffel symbols
+    # ∆ Christoffel symbols 
     Gamma = ufl.as_tensor(
         0.5 * G_v_inv[k, l] * (ufl.grad(G_v[j, l])[i] + ufl.grad(G_v[i, l])[j] - ufl.grad(G_v[i, j])[l]),
         (i, j, k)
     )
 
-    # Covariant derivative
+    # ∆ Covariant derivative
     covDev = ufl.as_tensor(ufl.grad(v)[i, j] + Gamma[i, k, j] * v[k], (i, j))
 
-    # Kinematics Tensors
-    C = ufl.variable(F.T * F) # Right Cauchy-Green deformation tensor
-    B = ufl.variable(F * F.T) # Left Cauchy-Green deformation tensor (unused but kept)
-    E = ufl.as_tensor(0.5 * (g_v - G_v)) # Green-Lagrange strain tensor
-    J = ufl.det(F) # Determinant of deformation gradient
+    # ∆ Kinematics Tensors
+    C = ufl.variable(F.T * F)  
+    B = ufl.variable(F * F.T) 
+    E = ufl.as_tensor(0.5 * (g_v - G_v))   
+    J = ufl.det(F)   
 
-    # Extract Constitutive terms
-    b0, bf, bt = gcc
+    # ∆ Extract Constitutive terms
+    c0, bf, bt = gcc
 
-    # Exponent term for strain energy density
+    # ∆ Exponent term
     Q = (
-        bf * E[0,0]**2 + bt *
-        (
-            E[1,1]**2 + E[2,2]**2 + E[1,2]**2 + E[2,1]**2 +
-            E[0,1]**2 + E[1,0]**2 + E[0,2]**2 + E[2,0]**2
-        )
+        bf * (E[0,0]**2) + 
+        bt * (E[1,1]**2 + E[2,2]**2 + E[1,2]**2 + E[2,1]**2) +
+        bt * (E[0,1]**2 + E[1,0]**2 + E[0,2]**2 + E[2,0]**2)
     )
 
-    # Second Piola-Kirchoff stress tensor
-    spk = b0/4 * ufl.exp(Q) * ufl.as_matrix([
+    # ∆ Seond Piola-Kirchoff 
+    spk = c0/4 * ufl.exp(Q) * ufl.as_matrix([
         [4*bf*E[0,0], 2*bt*(E[1,0] + E[0,1]), 2*bt*(E[2,0] + E[0,2])],
         [2*bt*(E[0,1] + E[1,0]), 4*bt*E[1,1], 2*bt*(E[2,1] + E[1,2])],
         [2*bt*(E[0,2] + E[2,0]), 2*bt*(E[1,2] + E[2,1]), 4*bt*E[2,2]],
     ])
-    SPK = spk - p * G_v_inv # Add pressure term
+    SPK = spk - p * g_v_inv #G_v_inv
 
-    cau = 1/ufl.det(F) * F * spk * F.T # Cauchy stress
+    cau = 1/ufl.det(F) * F * spk * F.T
 
-    # Residual (Weak form of equilibrium equations and incompressibility)
+    # ∆ Residual
     dx = ufl.Measure(integral_type="dx", domain=domain, metadata={"quadrature_degree": QUADRATURE})
     R = ufl.as_tensor(SPK[a, b] * F[j, b] * covDev[j, a]) * dx + q * (J - 1) * dx
 
-    # log.set_log_level(log.LogLevel.INFO) # Uncomment for detailed solver logs
-
-    # Solver setup
+    # ∆ Solver
     problem = NonlinearProblem(R, mx, [])
     solver = NewtonSolver(MPI.COMM_WORLD, problem)
     solver.atol = TOL
@@ -443,24 +363,22 @@ def fx_(t, file, gcc, r):
     opts["ksp_type"] = "preonly"
     opts["pc_type"] = "lu"
     opts["pc_factor_mat_solver_type"] = "mumps"
-    opts["ksp_monitor"] = None # Monitor KSP convergence
+    opts["ksp_monitor"] = None
     ksp.setFromOptions()
 
-    # Data storage for results
-    dis, pre = Function(V), Function(P)
+    # ∆ Data store
+    dis, pre = Function(V), Function(P) 
     sig, eps = Function(Tes), Function(Tes)
     dis.name = "U - Displacement"
     pre.name = "P - Pressure"
     sig.name = "S - Cauchy Stress"
     eps.name = "E - Green Strain"
-
-    # VTX writers for visualization output
     dis_file = io.VTXWriter(MPI.COMM_WORLD, f"_bp/_{t}/_DISP.bp", dis, engine="BP4")
     pre_file = io.VTXWriter(MPI.COMM_WORLD, f"_bp/_{t}/_PRE.bp", pre, engine="BP4")
     sig_file = io.VTXWriter(MPI.COMM_WORLD, f"_bp/_{t}/_SIG.bp", sig, engine="BP4")
     eps_file = io.VTXWriter(MPI.COMM_WORLD, f"_bp/_{t}/_EPS.bp", eps, engine="BP4")
 
-    # Setup boundary terms using mesh tags
+    # ∆ Setup boundary terms
     tgs_x0 = ft.find(3000)
     tgs_x1 = ft.find(3001)
     xx0 = locate_dofs_topological(Mxs.sub(0).sub(X), domain.topology.dim - 1, tgs_x0)
@@ -470,11 +388,11 @@ def fx_(t, file, gcc, r):
     zx0 = locate_dofs_topological(Mxs.sub(0).sub(Z), domain.topology.dim - 1, tgs_x0)
     zx1 = locate_dofs_topological(Mxs.sub(0).sub(Z), domain.topology.dim - 1, tgs_x1)
 
-    # Set Dirichlet boundary conditions for displacement components
+    # ∆ Set boundaries
     du_pos = Constant(domain, default_scalar_type(0.0))
     du_neg = Constant(domain, default_scalar_type(0.0))
-    d_xy0 = dirichletbc(du_pos, xx0, Mxs.sub(0).sub(X))
-    d_xy1 = dirichletbc(du_neg, xx1, Mxs.sub(0).sub(X))
+    d_xy0 = dirichletbc(du_pos, xx0, Mxs.sub(0).sub(X)) 
+    d_xy1 = dirichletbc(du_neg, xx1, Mxs.sub(0).sub(X)) 
     d_yy0 = dirichletbc(default_scalar_type(0.0), yx0, Mxs.sub(0).sub(Y))
     d_yy1 = dirichletbc(default_scalar_type(0.0), yx1, Mxs.sub(0).sub(Y))
     d_zy0 = dirichletbc(default_scalar_type(0.0), zx0, Mxs.sub(0).sub(Z))
@@ -482,67 +400,58 @@ def fx_(t, file, gcc, r):
     bc = [d_xy0, d_yy0, d_zy0, d_xy1, d_yy1, d_zy1]
     problem.bcs = bc
 
-    # Determine points within the 3D space for stress sampling
-    xx = np.flip(np.linspace(0.05 * EDGE[0], EDGE[0] - 0.05 * EDGE[0], 5))
-    yy = np.linspace(0.05 * EDGE[1], EDGE[1] - 0.05 * EDGE[1], 5)
-    zz = np.linspace(0.05 * EDGE[2], EDGE[2] - 0.05 * EDGE[2], 5)
+    # ∆ Iterative solver
+    incs = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20]
+    for ii, kk in enumerate(incs):
 
-    # Iterative solver loop for applying displacements
-    for ii, kk in enumerate([0, 5, 10, 15, 20]):
-
-        # Apply displacements as boundary conditions
+        # ∆ Apply displacements as boundary conditions
         du = CUBE["x"] * PXLS["x"] * (kk / 100)
         du_pos.value = default_scalar_type(du // 2)
-        du_neg.value = default_scalar_type(-du // 2)
+        du_neg.value = default_scalar_type(-du //2)
 
-        # Solve the nonlinear problem
-        try:
+        # ∆ Solve
+        try: 
             num_its, res = solver.solve(mx)
             print(f"SOLVED {kk}% IN:{num_its}, {res}")
-        except Exception as e:
-            print(f"Solver failed at {kk}%: {e}")
-            # Close files on failure
+        except:
+            # ∆ Close files
             dis_file.close()
             pre_file.close()
             sig_file.close()
             eps_file.close()
-            return -1, 0
-
-        # Evaluate and interpolate results
+            return -1, 0 
+        
+        # ∆ Evaluation
         u_eval = mx.sub(0).collapse()
         p_eval = mx.sub(1).collapse()
         dis.interpolate(u_eval)
         pre.interpolate(p_eval)
-
-        # Evaluate Cauchy stress
+        # µ Evaluate stress
         cauchy = Expression(
-            e=cau,
+            e=cau,  
             X=Tes.element.interpolation_points()
         )
         sig.interpolate(cauchy)
-
-        # Evaluate Green strain
+        # µ Evaluate stress
         green = Expression(
-            e=E,
+            e=E, 
             X=Tes.element.interpolation_points()
         )
         eps.interpolate(green)
-
-        # Format stress and strain for saving
+        
+        # ∆ Format for saving
         sig_arr = sig.x.array
         eps_arr = eps.x.array
         n_nodes = len(sig_arr) // DIM**2
         r_sig = sig_arr.reshape((n_nodes, DIM**2))
         r_eps = eps_arr.reshape((n_nodes, DIM**2))
 
-        # Compute principal stresses from Cauchy stress components
-        principal_stresses = compute_principal_stresses(r_sig)
-
-        # Format displacement for saving
+        # ∆ Repeat for displacement
         disp_arr = dis.x.array
         r_disp = disp_arr.reshape((len(disp_arr) // DIM), DIM)
 
-        # Store data in pandas DataFrames
+        # ∆ Store tensor data
+        coords = np.array(x_n.function_space.tabulate_dof_coordinates()[:])
         df = pd.DataFrame(
             data={
                 "X": coords[:, 0], "Y": coords[:, 1], "Z": coords[:, 2],
@@ -550,56 +459,20 @@ def fx_(t, file, gcc, r):
                 "sig_xy": r_sig[:, 1], "sig_xz": r_sig[:, 2], "sig_yz": r_sig[:, 5],
                 "eps_xx": r_eps[:, 0], "eps_yy": r_eps[:, 4], "eps_zz": r_eps[:, 8],
                 "eps_xy": r_eps[:, 1], "eps_xz": r_eps[:, 2], "eps_yz": r_eps[:, 5],
-                "sig_p1": principal_stresses[:, 0], # Max principal stress
-                "sig_p2": principal_stresses[:, 1], # Intermediate principal stress
-                "sig_p3": principal_stresses[:, 2]  # Min principal stress
-            }
-        )
-
-        df_disp = pd.DataFrame(
-            data={
-                "X": coords[:, 0], "Y": coords[:, 1], "Z": coords[:, 2],
                 "disp_x": r_disp[:, 0], "disp_y": r_disp[:, 1], "disp_z": r_disp[:, 2]
             }
         )
+        
+        # ∆ Save CSV
+        df.to_csv(f"_csv/sim_{t}_{kk}_{r}.csv")  
 
-        # Generate and save immediate stress distribution plots
-        plot_stress_distributions(df, t, kk)
-
-        # Calculate mean stress at specific points for the current load step
-        sigs = [] # Reset for each iteration to store current step's sample means
-        for (xp, yp, zp) in zip(xx, yy, zz):
-            df_p = df[(
-                (df["X"] >= xp - 400) & (df["X"] <= xp + 400) &
-                (df["Y"] >= yp - 400) & (df["Y"] <= yp + 400) &
-                (df["Z"] >= zp - 400) & (df["Z"] <= zp + 400)
-            )]
-            sigs.append(df_p.loc[:, 'sig_xx'].mean())
-
-
-        # Find mean stress within the central sphere
-        df['DS'] = (
-            (df["X"] - EDGE[0] // 2)**2 +
-            (df["Y"] - EDGE[1] // 2)**2 +
-            (df["Z"] - EDGE[2] // 2)**2
-        )
-        peak_df = df[df['DS'] <= RADIUS**2]
-        peak = peak_df.loc[:, 'sig_xx'].mean()
-
-        print(f"PT SIGS: {sigs} kPa")
-        print(f"PEAK SIG: {peak} kPa")
-
-        # Save CSV files
-        df.to_csv(f"_csv/sim_{t}_{kk}_{r}.csv")
-        df_disp.to_csv(f"_csv/dis_{t}_{kk}_{r}.csv")
-
-        # Write VTX files for current iteration
+        # ∆ Write files
         dis_file.write(ii)
         pre_file.write(ii)
         sig_file.write(ii)
         eps_file.write(ii)
 
-    # Close all VTX files after simulation loop
+    # ∆ Close files
     dis_file.close()
     pre_file.close()
     sig_file.close()
@@ -607,33 +480,36 @@ def fx_(t, file, gcc, r):
 
     return num_its, 1
 
-
-# Main simulation control function
+# ∆ Main
 def main(tests, m_ref):
-    """
-    Controls the overall simulation workflow, iterating through test cases.
 
-    Args:
-        tests (list): List of test case identifiers (e.g., ["test"]).
-        m_ref (int): Mesh refinement parameter, used for output file naming.
-    """
-    # Constitutive model parameters [b0, bf, bt]
-    gcc = [1.8, 14.4, 16.0]
+    # ∆ Test vals
+    # gcc = [3.51, 13.34, 10.37]
+    # gcc = [1, 11, 10]
+    gcc = [2.8107424166757204, 12.677385904668105, 11.039328556686252]
+    # gcc = [4.69, 10.15, 16.57]
 
-    wins = [] # List to track successful simulations
+    # ∆ Iterate tests 
+    wins = []
     for t in tests:
-        file = f"_msh/em_{m_ref}.msh" # Mesh file path
-        _, win_status = fx_(t, file, gcc, m_ref) # Run simulation
-        if win_status:
-            wins.append(t)
 
-    print(f" ~> WIN: {wins}") # Print successful test cases
+        # ∆ Mesh file
+        file = f"_msh/em_{m_ref}.msh"
 
-# Initiate simulation when script is run directly
+        # ∆ Simulation 
+        _, win = fx_(t, file, gcc, m_ref)
+        if win: wins.append(t)
+
+    print(f" ~> WIN: {win}")
+
+# ∆ Inititate 
 if __name__ == '__main__':
-    # Define test cases to run
-    # refs = ["test"] + [x for x in range(0, 18, 1)] # Example for multiple tests
-    refs = ["test"]
 
-    r = 400 # Refinement parameter (passed to fx_, used for file naming)
-    main(refs, r)
+    # ∆ Indicate test cases
+    # tests = ["test"] + [x for x in range(0, 18, 1)]
+    tests = [11]
+
+ 
+    # ∆ Refinements
+    r = 300
+    main(tests, r)

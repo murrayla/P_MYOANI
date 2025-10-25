@@ -162,9 +162,6 @@ def msh_(mesh_size):
     # ∆ Mesh generation
     gmsh.option.setNumber("Mesh.Algorithm", 5)
     gmsh.model.mesh.generate(DIM)
-    # gmsh.model.mesh.refine()
-    # gmsh.model.mesh.refine()
-    # gmsh.model.mesh.refine()
     gmsh.model.mesh.setOrder(order=ORDER)
 
     # ∆ Save to file
@@ -185,4 +182,4 @@ def main(msh_size):
 
 # ∆ Initialise
 if __name__ == '__main__':
-    main(200)
+    main(800)

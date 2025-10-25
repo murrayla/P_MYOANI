@@ -31,13 +31,10 @@
 # The maximum running time of the job in days-hours:mins:sec
 #SBATCH --time=5-00:00:00
 
-# check that the script is launched with sbatch
 if [ "x$SLURM_JOB_ID" == "x" ]; then
    echo "You need to submit your job to the queuing system with sbatch"
    exit 1
 fi
-
-# Run the job from the directory where it was launched (default)
 
 # The modules to load:
 module purge 
@@ -45,9 +42,8 @@ module load Anaconda3/2024.02-1
 
 # The job command(s):
 eval "$(conda shell.bash hook)"
-conda activate fenics
-python _tileMeshBig.py
-python _SimOriBig.py 
+conda activate dolfin
+python _SimOriBig.py
 
 ##DO NOT ADD/EDIT BEYOND THIS LINE##
 ##Job monitor command to list the resource usage

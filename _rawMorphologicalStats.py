@@ -129,12 +129,12 @@ def tile_data(data, norm_df):
 def validate_data(data, norm_df, iso_df):
 
     # # ∆ Setup visualisation
-    # fig = plt.figure(figsize=(12, 4))
-    # ax1 = fig.add_subplot(131)
-    # ax2 = fig.add_subplot(132)
-    # ax3 = fig.add_subplot(133)
-    # sns.set_palette("deep")
-    # colors = ["blue", "green", "red"]
+    fig = plt.figure(figsize=(12, 4))
+    ax1 = fig.add_subplot(131)
+    ax2 = fig.add_subplot(132)
+    ax3 = fig.add_subplot(133)
+    sns.set_palette("deep")
+    colors = ["blue", "green", "red"]
 
     # ∆ Dummy slice for calculating shape data
     dummy = np.ones_like(data)
@@ -142,176 +142,176 @@ def validate_data(data, norm_df, iso_df):
     cx, cy = (w-1)/2, (h-1)/2
     dummy = []
 
-    # # ∆ Iterate original data
-    # for _, row in iso_df.iterrows():
+    # ∆ Iterate original data
+    for _, row in iso_df.iterrows():
 
-    #     if row["ID"] in EXCLUSION: continue
+        if row["ID"] in EXCLUSION: continue
 
-    #     # ∆ Load centroid data
-    #     ori = np.array(ast.literal_eval(row["Centroid"]))
+        # ∆ Load centroid data
+        ori = np.array(ast.literal_eval(row["Centroid"]))
 
-    #     # ∆ Load principal componenets
-    #     pcs = np.array((
-    #         list(map(float, row["PC1"].strip('[]').split())), 
-    #         list(map(float, row["PC2"].strip('[]').split())), 
-    #         list(map(float, row["PC3"].strip('[]').split()))
-    #     ))
+        # ∆ Load principal componenets
+        pcs = np.array((
+            list(map(float, row["PC1"].strip('[]').split())), 
+            list(map(float, row["PC2"].strip('[]').split())), 
+            list(map(float, row["PC3"].strip('[]').split()))
+        ))
 
-    #     # ∆ Display the principal components
-    #     for i, vec in enumerate(pcs):
-    #         v = vec * 20 
-    #         ini = ori - v
-    #         end = ori + v
-    #         ax1.plot(
-    #             [ini[0], end[0]], [ini[1], end[1]],
-    #             color=colors[i], linewidth=1
-    #     )
+        # ∆ Display the principal components
+        for i, vec in enumerate(pcs):
+            v = vec * 20 
+            ini = ori - v
+            end = ori + v
+            ax1.plot(
+                [ini[0], end[0]], [ini[1], end[1]],
+                color=colors[i], linewidth=1
+        )
     
-    # # ∆ Iterate data and normalise
-    # for _, row in norm_df.iterrows():
+    # ∆ Iterate data and normalise
+    for _, row in norm_df.iterrows():
 
-    #     if row["ID"] in EXCLUSION: continue
+        if row["ID"] in EXCLUSION: continue
 
-    #     # ∆ Load centroid data
-    #     ori = np.array(ast.literal_eval(row["Centroid"]))
-    #     vx, vy, vz = ori
+        # ∆ Load centroid data
+        ori = np.array(ast.literal_eval(row["Centroid"]))
+        vx, vy, vz = ori
 
-    #     # ∆ Rotate data to determine if wihtin desired region
-    #     s_vx = vx - cx
-    #     s_vy = vy - cy
-    #     n45 = -np.pi/4
-    #     rot = np.array([
-    #         [np.cos(n45), -np.sin(n45)],
-    #         [np.sin(n45),  np.cos(n45)]
-    #     ])
-    #     s_rx, s_ry = np.dot(rot, [s_vx, s_vy])
-    #     rx = s_rx + M_D
-    #     ry = s_ry + M_D
-    #     ori = np.array([rx, ry])
+        # ∆ Rotate data to determine if wihtin desired region
+        s_vx = vx - cx
+        s_vy = vy - cy
+        n45 = -np.pi/4
+        rot = np.array([
+            [np.cos(n45), -np.sin(n45)],
+            [np.sin(n45),  np.cos(n45)]
+        ])
+        s_rx, s_ry = np.dot(rot, [s_vx, s_vy])
+        rx = s_rx + M_D
+        ry = s_ry + M_D
+        ori = np.array([rx, ry])
 
-    #     # ∆ Load principal componenets
-    #     pcs = np.array((
-    #         list(map(float, row["PC1_ROT"].strip('[]').split())), 
-    #         list(map(float, row["PC2_ROT"].strip('[]').split())), 
-    #         list(map(float, row["PC3_ROT"].strip('[]').split()))
-    #     ))
+        # ∆ Load principal componenets
+        pcs = np.array((
+            list(map(float, row["PC1_ROT"].strip('[]').split())), 
+            list(map(float, row["PC2_ROT"].strip('[]').split())), 
+            list(map(float, row["PC3_ROT"].strip('[]').split()))
+        ))
 
-    #     # ∆ Display the principal components
-    #     for i, vec in enumerate(pcs):
-    #         v = vec * 20 
-    #         ini = ori - v[:2]
-    #         end = ori + v[:2]
-    #         ax2.plot(
-    #             [ini[0], end[0]], [ini[1], end[1]],
-    #             color=colors[i], linewidth=1
-    #     )
+        # ∆ Display the principal components
+        for i, vec in enumerate(pcs):
+            v = vec * 20 
+            ini = ori - v[:2]
+            end = ori + v[:2]
+            ax2.plot(
+                [ini[0], end[0]], [ini[1], end[1]],
+                color=colors[i], linewidth=1
+        )
             
-    # # ∆ Create steps for tiling
-    # x_step = CUBE["x"] - 200
-    # y_step = CUBE["y"]
-    # sns_cmap = sns.color_palette("deep", n_colors=6)
+    # ∆ Create steps for tiling
+    x_step = CUBE["x"] - 200
+    y_step = CUBE["y"]
+    sns_cmap = sns.color_palette("deep", n_colors=6)
 
-    # # ∆ Iterate tile regions
-    # for idx_i, i in enumerate([0, 1]):
-    #     for idx_j, j in enumerate([0, 1, 2]):
+    # ∆ Iterate tile regions
+    for idx_i, i in enumerate([0, 1]):
+        for idx_j, j in enumerate([0, 1, 2]):
 
-    #         # ∆ Plot tiles 
-    #         x = Y_BOUNDS[0] + i * x_step
-    #         y = X_BOUNDS[0] + j * y_step
-    #         color = sns_cmap[idx_i * 3 + idx_j]
-    #         rec = patches.Rectangle((x, y), CUBE["x"], CUBE["y"], facecolor=color, edgecolor="black", alpha=0.6)
-    #         ax3.add_patch(rec)
+            # ∆ Plot tiles 
+            x = Y_BOUNDS[0] + i * x_step
+            y = X_BOUNDS[0] + j * y_step
+            color = sns_cmap[idx_i * 3 + idx_j]
+            rec = patches.Rectangle((x, y), CUBE["x"], CUBE["y"], facecolor=color, edgecolor="black", alpha=0.6)
+            ax3.add_patch(rec)
 
-    # # ∆ Format and save
-    # ax1.set_xlabel('X [nm]')
-    # ax1.set_ylabel('Y [nm]')
-    # ax1.set_title("Raw Principal Components")
-    # ax2.set_xlabel('X [nm]')
-    # ax2.set_ylabel('Y [nm]')
-    # ax2.set_title("Normalised Principal Components")
-    # ax3.set_xlabel('X [nm]')
-    # ax3.set_ylabel('Y [nm]')
-    # ax3.set_title("Simulation Regions")
-    # ax1.set_aspect('equal')
-    # ax2.set_aspect('equal')
-    # ax3.set_aspect('equal')
-    # ax2.set_xlim(1700, 3700)
-    # ax2.set_ylim(900, 4200)
-    # ax3.set_xlim(1700, 3700)
-    # ax3.set_ylim(900, 4200)
-    # plt.savefig(f"_png/ROT_PCA.png", bbox_inches='tight', pad_inches=0.2, dpi=1000)
-    # plt.close()
+    # ∆ Format and save
+    ax1.set_xlabel('X [nm]')
+    ax1.set_ylabel('Y [nm]')
+    ax1.set_title("Raw Principal Components")
+    ax2.set_xlabel('X [nm]')
+    ax2.set_ylabel('Y [nm]')
+    ax2.set_title("Normalised Principal Components")
+    ax3.set_xlabel('X [nm]')
+    ax3.set_ylabel('Y [nm]')
+    ax3.set_title("Simulation Regions")
+    ax1.set_aspect('equal')
+    ax2.set_aspect('equal')
+    ax3.set_aspect('equal')
+    ax2.set_xlim(1700, 3700)
+    ax2.set_ylim(900, 4200)
+    ax3.set_xlim(1700, 3700)
+    ax3.set_ylim(900, 4200)
+    plt.savefig(f"_png/ROT_PCA.png", bbox_inches='tight', pad_inches=0.2, dpi=1000)
+    plt.close()
 
-    # # ∆ Setup visualisation
-    # fig, axes = plt.subplots(nrows=3, ncols=6, figsize=(18, 9))
+    # ∆ Setup visualisation
+    fig, axes = plt.subplots(nrows=3, ncols=6, figsize=(18, 9))
 
-    # # ∆ Iterate tile regions
-    # k = [0,1,2] * 6
-    # j = [0,0,0,1,1,1,2,2,2,3,3,3,4,4,4,5,5,5]
+    # ∆ Iterate tile regions
+    k = [0,1,2] * 6
+    j = [0,0,0,1,1,1,2,2,2,3,3,3,4,4,4,5,5,5]
 
-    # # ∆ Load region data
-    # reg_df = pd.read_csv("_csv/reg_.csv")
+    # ∆ Load region data
+    reg_df = pd.read_csv("_csv/reg_.csv")
     
-    # for i, r in reg_df.iterrows():
+    for i, r in reg_df.iterrows():
 
-    #     # ∆ Axis setup
-    #     ax = axes[k[i], j[i]]
-    #     ax.set_xlim(r["x"], r["x"]+CUBE["x"])
-    #     ax.set_ylim(r["y"], r["y"]+CUBE["y"])
-    #     ax.set_xlabel('X [nm]')
-    #     ax.set_ylabel('Y [nm]')
-    #     ax.set_title("Simulation Regions")
-    #     ax.set_aspect('equal')
-    #     ax.set_title(f'z: {r["z"]}, x: {r["x"]}, y: {r["y"]}')
+        # ∆ Axis setup
+        ax = axes[k[i], j[i]]
+        ax.set_xlim(r["x"], r["x"]+CUBE["x"])
+        ax.set_ylim(r["y"], r["y"]+CUBE["y"])
+        ax.set_xlabel('X [nm]')
+        ax.set_ylabel('Y [nm]')
+        ax.set_title("Simulation Regions")
+        ax.set_aspect('equal')
+        ax.set_title(f'z: {r["z"]}, x: {r["x"]}, y: {r["y"]}')
 
-    #     # ∆ Iterate data and normalise
-    #     for _, row in norm_df.iterrows():
+        # ∆ Iterate data and normalise
+        for _, row in norm_df.iterrows():
 
-    #         if row["ID"] in EXCLUSION: continue
+            if row["ID"] in EXCLUSION: continue
 
-    #         # ∆ Load centroid data
-    #         ori = np.array(ast.literal_eval(row["Centroid"]))
-    #         vx, vy, vz = ori
+            # ∆ Load centroid data
+            ori = np.array(ast.literal_eval(row["Centroid"]))
+            vx, vy, vz = ori
 
-    #         # ∆ Rotate data to determine if wihtin desired region
-    #         s_vx = vx - cx
-    #         s_vy = vy - cy
-    #         n45 = -np.pi/4
-    #         rot = np.array([
-    #             [np.cos(n45), -np.sin(n45)],
-    #             [np.sin(n45),  np.cos(n45)]
-    #         ])
-    #         s_rx, s_ry = np.dot(rot, [s_vx, s_vy])
-    #         rx = s_rx + M_D
-    #         ry = s_ry + M_D
-    #         ori = np.array([rx, ry])
+            # ∆ Rotate data to determine if wihtin desired region
+            s_vx = vx - cx
+            s_vy = vy - cy
+            n45 = -np.pi/4
+            rot = np.array([
+                [np.cos(n45), -np.sin(n45)],
+                [np.sin(n45),  np.cos(n45)]
+            ])
+            s_rx, s_ry = np.dot(rot, [s_vx, s_vy])
+            rx = s_rx + M_D
+            ry = s_ry + M_D
+            ori = np.array([rx, ry])
 
-    #         # ∆ Check if within region
-    #         if (rx > r["x"] + CUBE["x"]) or (rx < r["x"]): continue
-    #         if (ry > r["y"] + CUBE["y"]) or (ry < r["y"]): continue
-    #         if (vz > r["z"] + CUBE["z"]) or (vz < r["z"]): continue
+            # ∆ Check if within region
+            if (rx > r["x"] + CUBE["x"]) or (rx < r["x"]): continue
+            if (ry > r["y"] + CUBE["y"]) or (ry < r["y"]): continue
+            if (vz > r["z"] + CUBE["z"]) or (vz < r["z"]): continue
             
 
-    #         # ∆ Load principal componenets
-    #         pcs = np.array((
-    #             list(map(float, row["PC1_ROT"].strip('[]').split())), 
-    #             list(map(float, row["PC2_ROT"].strip('[]').split())), 
-    #             list(map(float, row["PC3_ROT"].strip('[]').split()))
-    #         ))
+            # ∆ Load principal componenets
+            pcs = np.array((
+                list(map(float, row["PC1_ROT"].strip('[]').split())), 
+                list(map(float, row["PC2_ROT"].strip('[]').split())), 
+                list(map(float, row["PC3_ROT"].strip('[]').split()))
+            ))
 
-    #         # ∆ Display the principal components
-    #         for i, vec in enumerate(pcs):
-    #             v = vec * 20 
-    #             ini = ori - v[:2]
-    #             end = ori + v[:2]
-    #             ax.plot(
-    #                 [ini[0], end[0]], [ini[1], end[1]],
-    #                 color=colors[i], linewidth=1
-    #         )
+            # ∆ Display the principal components
+            for i, vec in enumerate(pcs):
+                v = vec * 20 
+                ini = ori - v[:2]
+                end = ori + v[:2]
+                ax.plot(
+                    [ini[0], end[0]], [ini[1], end[1]],
+                    color=colors[i], linewidth=1
+            )
 
-    # plt.tight_layout()
-    # plt.savefig(f"_png/TILES_PCA.png", bbox_inches='tight', pad_inches=0.2, dpi=1000)
-    # plt.close()
+    plt.tight_layout()
+    plt.savefig(f"_png/TILES_PCA.png", bbox_inches='tight', pad_inches=0.2, dpi=1000)
+    plt.close()
 
 # ∆ Standardise data and convert into Degrees
 def norm_data(zst_df):
@@ -429,12 +429,8 @@ def deep_stats(data, iso_df):
         # ∆ Apply properties to dictionary
         # µ Label data
         val = lab.label
-        # if val not in inc_labs:
-        #     continue
         if val not in ids_7:
             continue
-        # if lab.area < Z_DISC:
-        #     continue
 
         if val != 1456:
             continue
@@ -524,73 +520,71 @@ def pc_seg(data):
     reg_df = pd.read_csv("_csv/tile_7_w.csv")
     reg_id = reg_df["ID"].to_numpy()
 
-    # # ∆ Setup plot
-    # fig = plt.figure(figsize=(10, 8))
-    # ax = fig.add_subplot(111, projection='3d')
+    # ∆ Setup plot
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111, projection='3d')
 
-    # # ∆ Formatting 
-    # colors = ["#A98BFF", "#FAA52B", "#7EDAFF"]
-    # labels = ['PC1', 'PC2', 'PC3']
+    # ∆ Formatting 
+    colors = ["#A98BFF", "#FAA52B", "#7EDAFF"]
+    labels = ['PC1', 'PC2', 'PC3']
 
-    # # ∆ Iterate IDs
-    # for j, val in enumerate(reg_id):
+    # ∆ Iterate IDs
+    for j, val in enumerate(reg_id):
 
-    #     # ∆ Pixel indexes
-    #     idxs = np.argwhere(data == val)
-    #     mu_idxs = idxs * np.array([PIXX, PIXY, PIXZ])
-    #     # ax.scatter(mu_idxs[::100, 0], mu_idxs[::100, 1], mu_idxs[::100, 2], alpha=0.5, color="red")
+        # ∆ Pixel indexes
+        idxs = np.argwhere(data == val)
+        mu_idxs = idxs * np.array([PIXX, PIXY, PIXZ])
 
-    #     vx, vy, vz = np.mean(mu_idxs[:, 0]), np.mean(mu_idxs[:, 1]), np.mean(mu_idxs[:, 2])
+        vx, vy, vz = np.mean(mu_idxs[:, 0]), np.mean(mu_idxs[:, 1]), np.mean(mu_idxs[:, 2])
 
-    #     # ∆ Rotate data to determine if wihtin desired region
-    #     s_vx = vx - cx
-    #     s_vy = vy - cy
-    #     n45 = -np.pi/4
-    #     rot = np.array([
-    #         [np.cos(n45), -np.sin(n45)],
-    #         [np.sin(n45),  np.cos(n45)]
-    #     ])
-    #     s_rx, s_ry = np.dot(rot, [s_vx, s_vy])
-    #     rx = s_rx + M_D
-    #     ry = s_ry + M_D
-    #     ori = np.array([rx, ry, vz])
+        # ∆ Rotate data to determine if wihtin desired region
+        s_vx = vx - cx
+        s_vy = vy - cy
+        n45 = -np.pi/4
+        rot = np.array([
+            [np.cos(n45), -np.sin(n45)],
+            [np.sin(n45),  np.cos(n45)]
+        ])
+        s_rx, s_ry = np.dot(rot, [s_vx, s_vy])
+        rx = s_rx + M_D
+        ry = s_ry + M_D
+        ori = np.array([rx, ry, vz])
 
-    #     scatter_color = plt.cm.viridis(j / len(reg_id))
-    #     rot_idxs = np.concatenate([(rot @ mu_idxs[:, :2].T).T, mu_idxs[:, 2][:, np.newaxis]], axis=1)
-    #     ax.scatter(rot_idxs[::100, 0], rot_idxs[::100, 1], rot_idxs[::100, 2], alpha=0.1, color="black")
+        scatter_color = plt.cm.viridis(j / len(reg_id))
+        rot_idxs = np.concatenate([(rot @ mu_idxs[:, :2].T).T, mu_idxs[:, 2][:, np.newaxis]], axis=1)
+        ax.scatter(rot_idxs[::100, 0], rot_idxs[::100, 1], rot_idxs[::100, 2], alpha=0.1, color="black")
 
-    #     # ∆ Principal Components Analysis
-    #     pca = PCA(n_components=3)
-    #     pca.fit(rot_idxs)
-    #     origin = pca.mean_
+        # ∆ Principal Components Analysis
+        pca = PCA(n_components=3)
+        pca.fit(rot_idxs)
+        origin = pca.mean_
 
-    #     # ∆ plot components
-    #     for i, (length, vector) in enumerate(zip(pca.explained_variance_, pca.components_)):
-    #         if i == 0:
-    #             l = np.sqrt(length) * 2
-    #         if i != 2:
-    #             continue
-    #         v = vector * l
-    #         start = origin - v
-    #         end = origin + v
-    #         if not j:
-    #             ax.plot([start[0], end[0]], [start[1], end[1]], [start[2], end[2]],
-    #                     color=colors[i], linewidth=5, label=labels[i], alpha=1)
-    #         else:
-    #             ax.plot([start[0], end[0]], [start[1], end[1]], [start[2], end[2]],
-    #                     color=colors[i], linewidth=5, alpha=1)
+        # ∆ plot components
+        for i, (length, vector) in enumerate(zip(pca.explained_variance_, pca.components_)):
+            if i == 0:
+                l = np.sqrt(length) * 2
+            if i != 2:
+                continue
+            v = vector * l
+            start = origin - v
+            end = origin + v
+            if not j:
+                ax.plot([start[0], end[0]], [start[1], end[1]], [start[2], end[2]],
+                        color=colors[i], linewidth=5, label=labels[i], alpha=1)
+            else:
+                ax.plot([start[0], end[0]], [start[1], end[1]], [start[2], end[2]],
+                        color=colors[i], linewidth=5, alpha=1)
                 
-    #     # if not j: break
                 
-    # ax.legend()
-    # ax.set_xlabel('X')
-    # ax.set_ylabel('Y')
-    # ax.set_zlabel('Z')
-    # ax.set_title("Region 7 [PCA]")
-    # ax.view_init(elev=20, azim=-60)
-    # plt.show()
-    # plt.savefig(f"_png/reg_pca.png", bbox_inches='tight', pad_inches=0.2, dpi=500)
-    # plt.close()
+    ax.legend()
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    ax.set_title("Region 7 [PCA]")
+    ax.view_init(elev=20, azim=-60)
+    plt.show()
+    plt.savefig(f"_png/reg_pca.png", bbox_inches='tight', pad_inches=0.2, dpi=500)
+    plt.close()
 
     # ∆ Setup plot
     fig = plt.figure(figsize=(10, 10))
@@ -606,7 +600,6 @@ def pc_seg(data):
         # ∆ Pixel indexes
         idxs = np.argwhere(data == val)
         mu_idxs = idxs * np.array([PIXX, PIXY, PIXZ])
-        # ax.scatter(mu_idxs[::100, 0], mu_idxs[::100, 1], mu_idxs[::100, 2], alpha=0.5, color="red")
 
         # ∆ Rotate data to determine if wihtin desired region
         n45 = -np.pi/4
@@ -635,24 +628,13 @@ def pc_seg(data):
 
             # Quiver plot from the origin
             ax.quiver(origin[0], origin[1], scaled_vector[0], scaled_vector[1],
-                    angles='xy', scale_units='xy', scale=1,
-                    color=colors[i], label=labels[i], linewidth=10)
-            # v = vector * l
-            # start = origin - v
-            # end = origin + v
-            # ax.plot([start[0], end[0]], [start[1], end[1]],
-            #         color=colors[i], linewidth=5, label=labels[i], alpha=1)
-            # ax.quiver(start[0], start[1], end[0], end[1], color=colors[i], linewidth=5, edgecolor='black', scale=100)
-
-        # break
-                
-    ax.set_title("Region 7 [PCA]")
+                    angles='xy', scale_units='xy', scale=0.75,
+                    color=colors[i], label=labels[i], linewidth=100)
+            
     ax.set_axis_off()
     plt.savefig(f"_png/reg_pca_2D.png", bbox_inches='tight', pad_inches=0.2, dpi=500)
     plt.close()
 
-
-"""ES-BB6F4BFF8125"""
 
 # ∆ Isolate Segmentations
 def isolate_segs(data):
@@ -707,25 +689,25 @@ def isolate_segs(data):
 def main(seg_np):
 
     # ∆ Isolate values
-    # iso_df = isolate_segs(seg_np)
+    iso_df = isolate_segs(seg_np)
 
     # # ∆ Determine statistical data
-    # reg_df = pd.read_csv("_csv/reg_stats_whole.csv")
-    # deep_stats(seg_np, reg_df)
+    reg_df = pd.read_csv("_csv/reg_stats_whole.csv")
+    deep_stats(seg_np, reg_df)
 
     # # ∆ Standardise
-    # iso_df = pd.read_csv("_csv/iso_stats.csv")
-    # norm_data(iso_df)
+    iso_df = pd.read_csv("_csv/iso_stats.csv")
+    norm_data(iso_df)
 
     # ∆ Validation plot
-    # norm_df = pd.read_csv("_csv/norm_stats.csv")
-    # validate_data(seg_np, norm_df, iso_df)
+    norm_df = pd.read_csv("_csv/norm_stats.csv")
+    validate_data(seg_np, norm_df, iso_df)
 
     # ∆ Save a rotated dataset
-    # rot_data(seg_np, norm_df)
+    rot_data(seg_np, norm_df)
 
     # ∆ Tile dataset
-    # tile_data(seg_np, norm_df)
+    tile_data(seg_np, norm_df)
 
     # ∆ Display Segs and PCs
     pc_seg(seg_np)
@@ -734,7 +716,7 @@ def main(seg_np):
 if __name__ == "__main__":
 
     # ∆ Load data
-    seg_np = np.load("/Users/murrayla/Documents/main_PhD/BIG_SEG/filtered.npy").astype(np.uint16)[:2000, 1000:4000, 90:210]
+    seg_np = np.load("filtered.npy").astype(np.uint16)
 
     # ∆ Open main
     main(seg_np)

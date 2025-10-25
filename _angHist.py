@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.colors as mcolors
 from scipy.stats import mannwhitneyu, ttest_ind, ks_2samp
+from scipy.stats import skew, kurtosis
 from statsmodels.stats.multitest import multipletests
 
 # ∆ Constants
@@ -29,13 +30,13 @@ EXCLUSION = [335, 653, 775, 1108, 1406, 42, 185, 191, 335, 653, 775, 1108, 1406,
 CUBE = {"x": 1000, "y": 1000, "z": 100}
 
 plt.rcParams.update({
-    'font.size': 10,          # Base font size for all text
-    'axes.titlesize': 10,     # Title size
-    'axes.labelsize': 10,     # Axis label size
-    'xtick.labelsize': 10,    # X tick label size
-    'ytick.labelsize': 10,    # Y tick label size
-    'legend.fontsize': 8,    # Legend font size
-    'legend.title_fontsize': 8  # Legend title size
+    'font.size': 10,         
+    'axes.titlesize': 10,    
+    'axes.labelsize': 10,    
+    'xtick.labelsize': 10,  
+    'ytick.labelsize': 10,  
+    'legend.fontsize': 10,   
+    'legend.title_fontsize': 10 
 })
 
 def arrow_plot():
@@ -48,7 +49,6 @@ def arrow_plot():
     # ∆ Colormap settings
     all_sph = []
 
-    # First pass: collect all Sph_[DEG] values
     for i in range(18):
         df = pd.read_csv(f"_csv/tile_{i}_w.csv")
         sph_values = df["Sph_[DEG]"].dropna().astype(float)
@@ -57,7 +57,6 @@ def arrow_plot():
     norm = mcolors.Normalize(vmin=min(all_sph), vmax=max(all_sph))
     cmap = plt.cm.viridis
 
-    # Second pass: plot each region
     for i in range(18):
         df = pd.read_csv(f"_csv/tile_{i}_w.csv")
         ax = axes[i]
@@ -70,7 +69,6 @@ def arrow_plot():
 
             color = cmap(norm(sph))
 
-            # Scale vector length (you can adjust scale factor as needed)
             scale = 40
             ax.quiver(cx, cy, px, py, angles='xy',
                     scale_units='xy', scale=1/scale, color=color, width=0.003)
@@ -92,7 +90,6 @@ def arrow_plot():
     plt.tight_layout()
     fig.savefig(f"_png/Arrow_Grid.png")
     plt.close()
-
 
 def reg_hists():
 
@@ -127,7 +124,6 @@ def reg_hists():
 
     # ∆ Store angle data
     sph_nuc = norm_df.loc[nuc_df, "Sph_[DEG]"].tolist()
-    # sph_per = norm_df.loc[per_df & ~nuc_df, "Sph_[DEG]"].tolist()  
     sph_per = norm_df.loc[per_df, "Sph_[DEG]"].tolist()  
     sph_cen = norm_df.loc[cen_df, "Sph_[DEG]"].tolist()
     sph_data = [sph_nuc, sph_per, sph_cen]
@@ -194,9 +190,6 @@ def reg_hists():
     print(f"p_welch: {p_welch}")
     print(f"p_ks: {p_ks}")
 
-    # exit()
-
-    # Annotate with stars if significant
     for i, (data, color, title) in enumerate(zip(sph_data[:-1], colors[:-1], titles[:-1])):
         if p_mwu[i] < alpha:
             plt.text(x[i] - width, 0.06, "*", ha='center', va='bottom', fontsize=20, color='black')
@@ -210,7 +203,7 @@ def reg_hists():
     plt.ylabel("p-value")
     plt.title("Region vs Global Statistical Comparison")
     plt.legend()
-    plt.ylim(0, 1.05)  # extend y-axis to fit asterisks if needed
+    plt.ylim(0, 1.05)  
     plt.tight_layout()
     plt.savefig(f"_png/NucPerCen_compare.png")
     plt.close()
@@ -219,14 +212,11 @@ def reg_hists():
     fig = plt.figure(figsize=(10, 8), dpi=100)
     ax = fig.add_subplot(111, projection='3d')
 
-    # Plot each region with a label and color
     ax.scatter(norm_df.loc[nuc_df, 'x'], norm_df.loc[nuc_df, 'y'], norm_df.loc[nuc_df, 'z'],
                color=colors[0], label="Nucleus", alpha=1)
     ax.scatter(norm_df.loc[per_df, 'x'], norm_df.loc[per_df, 'y'], norm_df.loc[per_df, 'z'],
                color=colors[1], label="Periphery", alpha=1)
-    # ax.scatter(norm_df.loc[cen_df, 'x'], norm_df.loc[cen_df, 'y'], norm_df.loc[cen_df, 'z'],
-    #            color=colors[2], label="Core", alpha=1)
-
+    
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
     ax.set_zlabel("Z")
@@ -308,7 +298,6 @@ def heat_bar_(angle_key, label):
     bars2 = plt.bar(x, p_welch, width=width, label="Welch's t-test", color="#FAA52B", edgecolor="black")
     bars3 = plt.bar(x + width, p_ks, width=width, label='K–S test', color="#A98BFF",edgecolor="black")
 
-    # Annotate with stars if significant
     for i in range(18):
         if p_mwu[i] < alpha:
             plt.text(x[i] - width, 0.06, "*", ha='center', va='bottom', fontsize=20, color='black')
@@ -322,39 +311,46 @@ def heat_bar_(angle_key, label):
     plt.ylabel("p-value")
     plt.title("Region vs Global Statistical Comparison")
     plt.legend()
-    plt.ylim(0, 1.05)  # extend y-axis to fit asterisks if needed
+    plt.ylim(0, 1.05) 
     plt.tight_layout()
     plt.savefig(f"_png/{label}_pvalue_bar_compare.png")
     plt.close()
 
-
-
 def hist_dist(angle_key, color, label):
 
     # ∆ Settings
-    # sns.set_style("whitegrid")
+    sns.set_style("whitegrid")
 
-    # all_angles = []
-    # fig, axes = plt.subplots(3, 6, figsize=(18, 9), dpi=300)
-    # axes = axes.flatten()
+    bin_size = 1.5  
+    bin_edges = np.arange(-30 - bin_size/2, 30 + bin_size/2, bin_size)
 
-    # for i in range(0, 18, 1):
-    #     df = pd.read_csv(f"_csv/tile_{i}_w.csv")
-    #     angles = df[angle_key].dropna()
-    #     angles = angles[angles.abs() <= 35]
-    #     all_angles.extend(angles)
+    all_angles = []
+    fig, axes = plt.subplots(3, 6, figsize=(18, 9), dpi=300)
+    axes = axes.flatten()
 
-    #     sns.histplot(angles, bins=30, binrange=(-30, 30), stat='count',
-    #                  color=color, edgecolor='black', ax=axes[i])
-    #     axes[i].set_xlim(-30, 30)
-    #     axes[i].set_title(f"Region {i}")
-    #     axes[i].set_xlabel("Angle [Degree]")
-    #     axes[i].set_ylabel("Count")
+    for i in range(0, 18):
+        df = pd.read_csv(f"_csv/tile_{i}_w.csv")
+        angles = df[angle_key].dropna()
+        angles = angles[angles.abs() <= 35]
+        all_angles.extend(angles)
 
-    # plt.tight_layout()
-    # fig.savefig(f"_png/{label}_Grid.png")
-    # plt.close()
+        sns.histplot(
+            angles,
+            bins=bin_edges,
+            stat='count',
+            color=color,
+            edgecolor='black',
+            ax=axes[i]
+        )
+        axes[i].set_xlim(-30, 30)
+        axes[i].set_xticks(np.arange(-30, 31, 10))
+        axes[i].set_title(f"Region {i}")
+        axes[i].set_xlabel("Angle [Degree]")
+        axes[i].set_ylabel("Count")
 
+    plt.tight_layout()
+    fig.savefig(f"_png/{label}_Grid_CEN.png")
+    plt.close()
     select = [0, 1, 5, 6, 8, 9, 12, 13, 17]
 
     # ∆ Gather angle data with significance labels
@@ -378,7 +374,7 @@ def hist_dist(angle_key, color, label):
     sns.violinplot(
         x='Angle', y='Region', hue='Group', data=angle_df, inner="quart", inner_kws=dict(alpha=1),
         palette={"p < 0.05": "#A98BFF", "p >= 0.05": color},
-        dodge=False  # ensure violins are not split side-by-side
+        dodge=False 
     )
 
     plt.axvline(0.03, color='black', linestyle='--', linewidth=0.8, label="μ")
@@ -392,54 +388,182 @@ def hist_dist(angle_key, color, label):
     plt.savefig(f"_png/{label}_Boxplot.png")
     plt.close()
 
-    # norm_df = pd.read_csv(f"_csv/rot_norm_w.csv")
-    # all_angles = norm_df[angle_key].dropna()
-    # all_angles = all_angles[all_angles.abs() <= 30].tolist()
+    norm_df = pd.read_csv(f"_csv/rot_norm_w.csv")
+    all_angles = norm_df[angle_key].dropna()
+    all_angles = all_angles[all_angles.abs() <= 30].tolist()
 
-    # # ∆ Final cumulative histogram
-    # # plt.figure(figsize=(6, 6), dpi=500)
-    # sns.histplot(all_angles, bins=40, binrange=(-30, 30), stat='count',
-    #              color=color, edgecolor='black')
-                 
+    # ∆ Define bin size and edges
+    bin_size = 1.5  # degrees per bin
+    bin_edges = np.arange(-30 - bin_size/2, 30 + bin_size/2, bin_size)
 
-    # plt.xlim(-30, 30)
-    # # plt.xlabel("Angle [DEG]")
-    # plt.ylabel("Count [#]")
-    # plt.title(f"Total Z-Disc {label} Angle Distribution")
-    # plt.tight_layout()
-    # plt.savefig(f"_png/{label}_Total.png")
-    # plt.close()
+    # ∆ Define figure size in mm
+    mm_to_inch = 1 / 25.4
+    fig_w, fig_h = 96 * mm_to_inch, 116 * mm_to_inch  
 
-    # print(np.mean(all_angles))
-    # print(np.std(all_angles))
+    # ∆ Plot histogram
+    plt.figure(figsize=(fig_w, fig_h), dpi=500)
 
-    # from scipy.stats import skew, kurtosis
+    # ∆ Plot histogram
+    sns.histplot(
+        all_angles,
+        bins=bin_edges,
+        stat='count',
+        color=color,
+        edgecolor='black'
+    )  
 
-    # # Calculate skewness
-    # # bias=False corrects for statistical bias, providing the sample skewness.
-    # # bias=True (default) calculates the population skewness.
-    # skewness_value = skew(all_angles, bias=False)
-    # print(f"Skewness: {skewness_value}")
+    plt.xlim(-30, 30)
+    plt.ylabel("Count [#]")
+    plt.title(f"Total Z-Disc {label} Angle Distribution")
+    plt.tight_layout()
+    plt.savefig(f"_png/{label}_Total_CEN.png")
+    plt.close()
 
-    # # Calculate kurtosis
-    # # Fisher's definition of kurtosis is typically used, where a normal distribution has a kurtosis of 0.
-    # # bias=False corrects for statistical bias.
-    # kurtosis_value = kurtosis(all_angles, fisher=True, bias=False)
-    # print(f"Kurtosis: {kurtosis_value}")
+    print(np.mean(all_angles))
+    print(np.std(all_angles))
 
-    # # If you want Pearson's definition of kurtosis (where normal distribution has kurtosis of 3),
-    # # set fisher=False.
-    # pearson_kurtosis_value = kurtosis(all_angles, fisher=False, bias=False)
-    # print(f"Pearson's Kurtosis: {pearson_kurtosis_value}")
-    # exit()
+
+
+    skewness_value = skew(all_angles, bias=False)
+    print(f"Skewness: {skewness_value}")
+
+    kurtosis_value = kurtosis(all_angles, fisher=True, bias=False)
+    print(f"Kurtosis: {kurtosis_value}")
+
+    pearson_kurtosis_value = kurtosis(all_angles, fisher=False, bias=False)
+    print(f"Pearson's Kurtosis: {pearson_kurtosis_value}")
+
+def z_s():
+
+    # . define shared colour palette
+    colors = ["#7EDAFF", "#FAA52B", "#A98BFF"]
+    palette = {f"z_{i}_{i+1}": c for i, c in enumerate(colors)}
+
+    # . figure setup for histograms
+    cvt = 1 / 25.4
+    fig_w, fig_h = 180 * cvt, 150 * cvt
+    fig, axes = plt.subplots(3, 1, figsize=(fig_w, fig_h), dpi=500)
+    axes = axes.flatten()
+
+    # . data setup
+    norm_df = pd.read_csv(f"_csv/rot_norm_w.csv")
+    xs = np.array([ast.literal_eval(ori)[0] for ori in norm_df["Centroid"].values]).astype(np.float32) *  0.11
+    ys = np.array([ast.literal_eval(ori)[1] for ori in norm_df["Centroid"].values]).astype(np.float32) *  0.11
+    zs = np.array([ast.literal_eval(ori)[2] for ori in norm_df["Centroid"].values]).astype(np.float32) *  0.50
+
+    # . coordinate bounds
+    z_min, z_max = np.min(zs), np.max(zs)
+    pz = np.linspace(z_min, z_max, 4)
+
+    # . bin setup
+    edg = np.linspace(0, 5000 * 0.11, 14)
+    bin_centres = (edg[:-1] + edg[1:]) / 2  
+
+    bin_dict = {}
+    flat_df = []  
+
+    # . loop z-slices
+    for i in range(3):
+        ax = axes[i]
+        z0, z1 = pz[i], pz[i + 1]
+        z_label = f"{int(z0)}–{int(z1)}"
+        col = colors[i]
+
+        idx = (zs >= z0) & (zs <= z1)
+        x, y, z = xs[idx], ys[idx], zs[idx]
+
+        cnt, edges = np.histogram(y, bins=edg)
+        val_bin = {}
+        dist_bin = {}
+
+        for j in range(len(edges) - 1):
+            lower, upper = edges[j], edges[j + 1]
+            mask = (y >= lower) & (y < upper)
+            xb, yb, zb = x[mask], y[mask], z[mask]
+            pts = np.column_stack((xb, yb, zb))
+            val_bin[f"{lower:.1f}-{upper:.1f}"] = yb.tolist()
+
+            if len(pts) > 1:
+                diff = pts[:, np.newaxis, :] - pts[np.newaxis, :, :]
+                dmat = np.sqrt(np.sum(diff**2, axis=-1))
+                avg_dist = np.sum(dmat, axis=1) / (len(pts) - 1)
+                dist_bin[f"{lower:.1f}-{upper:.1f}"] = avg_dist.tolist()
+
+                flat_df.extend([
+                    {"z_slice": z_label,
+                     "bin": f"{(lower + upper) / 2:.0f}",
+                     "avg_dist": d}
+                    for d in avg_dist
+                ])
+            else:
+                dist_bin[f"{lower:.1f}-{upper:.1f}"] = []
+
+        # store data
+        bin_dict[f"z_{int(z0)}_{int(z1)}"] = {
+            "counts": cnt.tolist(),
+            "edges": edges.tolist(),
+            "vals": val_bin,
+            "avg_dists": dist_bin
+        }
+
+        sns.histplot(
+            y,
+            ax=ax,
+            bins=edges,
+            stat='count',
+            color=col,
+            edgecolor='black'
+        )
+
+        ax.set_xticks(bin_centres)
+        ax.set_xticklabels([f"{int(c)}" for c in bin_centres])
+        ax.set_xlim([edg[0], edg[-1]])
+        ax.set_ylim([0, 50])
+        ax.set_title(f"{int(z0)} ≥ z < {int(z1)} [µm]")
+        ax.set_ylabel("[#]")
+        if i != 2:
+            ax.set_xticklabels([])
+
+
+    plt.xlabel("y-bin [µm]")
+    plt.tight_layout()
+    plt.savefig("_png/pos_bins_histograms.png")
+    plt.close(fig)
+
+    dist_df = pd.DataFrame(flat_df)
+
+    z_order = [f"{int(pz[i])}–{int(pz[i+1])}" for i in range(3)]
+    hue_palette = dict(zip(z_order, colors))
+
+    fig2, ax2 = plt.subplots(figsize=(180 * cvt, 100 * cvt), dpi=500)
+    sns.boxplot(
+        data=dist_df,
+        x="bin",
+        y="avg_dist",
+        hue="z_slice",
+        showfliers=False,
+        ax=ax2,
+        palette=hue_palette,
+        order=sorted(dist_df["bin"].unique(), key=float)  
+    )
+
+    ax2.set_title("Average distances between Z-Discs within group")
+    ax2.set_xlabel("y-bin [µm]")
+    ax2.set_ylabel("Average Distance [µm]")
+    ax2.legend(title="Z-Level [µm]", loc="best")
+
+    plt.tight_layout()
+    plt.savefig("_png/pos_bins_boxplots.png")
+    plt.close(fig2)
 
 # ∆ Main
 def main():
 
     hist_dist("Sph_[DEG]", "#7EDAFF", "Spherical")
-    # heat_bar_("Sph_[DEG]", "Spherical")
-    # reg_hists()
-    # arrow_plot()
+    z_s()
+    heat_bar_("Sph_[DEG]", "Spherical")
+    reg_hists()
+    arrow_plot()
 
 # ∆ Inititate
 if __name__ == "__main__":

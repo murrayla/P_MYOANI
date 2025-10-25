@@ -177,30 +177,6 @@ def angle_assign(coords):
                 nvecs[j] = nvec
                 zid[j] = 1
 
-    # ∆ Global smoothing
-    azi = global_smooth(coords, azi)
-    ele = global_smooth(coords, ele)
-    sph = global_smooth(coords, sph)
-
-    # ∆ Final smoothing 
-    def final_pass(coords, data):
-        tol = 1e-8
-        sx, sy, sz = 500, 500, 500
-        s_data = np.zeros_like(data)
-        for i in range(0, len(coords), 1):
-            dx = coords[:, 0] - coords[i, 0]
-            dy = coords[:, 1] - coords[i, 1]
-            dz = coords[:, 2] - coords[i, 2]
-            wei = np.exp(-0.5 * ((dx / sx)**2 + (dy / sy)**2 + (dz / sz)**2))
-            wei /= wei.sum() + tol
-            s_data[i] = np.sum(wei * data)
-        return s_data
-    
-    # ∆ Simple smoothing
-    # azi = final_pass(coords, azi)
-    # ele = final_pass(coords, ele)
-    # sph = final_pass(coords, sph)
-
     return azi, ele, zs, sph
 
 # ∆ Fenics simulation
