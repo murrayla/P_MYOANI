@@ -351,6 +351,7 @@ def hist_dist(angle_key, color, label):
     plt.tight_layout()
     fig.savefig(f"_png/{label}_Grid_CEN.png")
     plt.close()
+    
     select = [0, 1, 5, 6, 8, 9, 12, 13, 17]
 
     # ∆ Gather angle data with significance labels
@@ -421,8 +422,6 @@ def hist_dist(angle_key, color, label):
 
     print(np.mean(all_angles))
     print(np.std(all_angles))
-
-
 
     skewness_value = skew(all_angles, bias=False)
     print(f"Skewness: {skewness_value}")
@@ -556,14 +555,103 @@ def z_s():
     plt.savefig("_png/pos_bins_boxplots.png")
     plt.close(fig2)
 
+def scat_trends(angle_key, label):
+
+    # . setup
+    sns.set_style("whitegrid")
+    data = []
+    colors = sns.color_palette("tab20", 18)
+    regasi = {f'R{i}': colors[i] for i in range(18)}
+    signif = [0, 1, 5, 6, 8, 9, 12, 13, 17]
+
+    # . iterate the data and store
+    for i in range(18):
+
+        # . store
+        df = pd.read_csv(f"_csv/tile_{i}_w.csv")
+        ang = df[angle_key].dropna()
+        ang = ang[ang.abs() <= 30]
+        
+        # . organise by significance
+        group = "p < 0.05" if i in signif else "p >= 0.05"
+        
+        # . store all values
+        data.append({
+            'Region': f'R{i}', 
+            'Mean': np.mean(ang), 
+            'Median': np.median(ang),
+            'Count': sum(df["Pixels"].dropna()),
+            'Skew': skew(ang), 
+            'Kurt': kurtosis(ang, fisher=True, bias=False),
+            'Group': group
+        })
+
+    # . convert to pandas dataframe
+    data_df = pd.DataFrame(data)
+
+    # . figure
+    plt.figure(figsize=(6, 5), dpi=500) 
+
+    # . plot
+    sns.scatterplot(
+        data=data_df,
+        x='Mean',  y='Skew', hue='Region',      
+        style='Group', markers={"p < 0.05": "X", "p >= 0.05": "o"},
+        palette=regasi,
+        s=100            
+    )
+
+    # . save
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+    plt.tight_layout()
+    plt.savefig(f"_png/{label}_Skew.png")
+    plt.close()
+
+    # . figure
+    plt.figure(figsize=(6, 5), dpi=500) 
+
+    # . plot
+    sns.scatterplot(
+        data=data_df,
+        x='Mean',  y='Median', hue='Region',      
+        style='Group', markers={"p < 0.05": "X", "p >= 0.05": "o"},
+        palette=regasi,
+        s=100            
+    )
+
+    # . save
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+    plt.tight_layout()
+    plt.savefig(f"_png/{label}_Median.png")
+    plt.close()
+
+    # . figure
+    plt.figure(figsize=(6, 5), dpi=500) 
+
+    # . plot
+    sns.scatterplot(
+        data=data_df,
+        x='Mean',  y='Count', hue='Region',      
+        style='Group', markers={"p < 0.05": "X", "p >= 0.05": "o"},
+        palette=regasi,
+        s=100            
+    )
+
+    # . save
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+    plt.tight_layout()
+    plt.savefig(f"_png/{label}_Count.png")
+    plt.close()
+
 # ∆ Main
 def main():
 
-    hist_dist("Sph_[DEG]", "#7EDAFF", "Spherical")
-    z_s()
-    heat_bar_("Sph_[DEG]", "Spherical")
-    reg_hists()
-    arrow_plot()
+    # hist_dist("Sph_[DEG]", "#7EDAFF", "Spherical")
+    # z_s()
+    # heat_bar_("Sph_[DEG]", "Spherical")
+    # reg_hists()
+    # arrow_plot()
+    scat_trends("Sph_[DEG]", "Spherical")
 
 # ∆ Inititate
 if __name__ == "__main__":

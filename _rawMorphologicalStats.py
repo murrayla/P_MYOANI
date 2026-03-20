@@ -142,6 +142,7 @@ def validate_data(data, norm_df, iso_df):
     cx, cy = (w-1)/2, (h-1)/2
     dummy = []
 
+
     # ∆ Iterate original data
     for _, row in iso_df.iterrows():
 
@@ -716,7 +717,7 @@ def main(seg_np):
 if __name__ == "__main__":
 
     # ∆ Load data
-    seg_np = np.load("filtered.npy").astype(np.uint16)
+    seg_np = np.load("_npy/filtered.npy").astype(np.uint16)
 
     # ∆ Open main
     main(seg_np)

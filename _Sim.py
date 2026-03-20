@@ -316,6 +316,23 @@ def fx_(t, file, gcc, r):
         (i, j, k)
     )
 
+    V_scalar = functionspace(domain, ("Lagrange", 1))
+    gamma_magnitude = Function(V_scalar)
+
+    # 2. Use UFL to calculate the Frobenius norm (total magnitude) of the Gamma tensor
+    # Gamma has 27 components (3x3x3). This sums the squares of all of them.
+    gamma_norm_sq = ufl.inner(Gamma, Gamma)
+
+    # 3. Create an expression to interpolate this into our scalar field
+    gamma_expr = Expression(ufl.sqrt(gamma_norm_sq), V_scalar.element.interpolation_points())
+    gamma_magnitude.interpolate(gamma_expr)
+
+    # 4. Find the maximum value in the whole domain
+    max_gamma = domain.comm.allreduce(np.max(gamma_magnitude.x.array), op=MPI.MAX)
+
+    print(f"--- GEOMETRIC CHECK ---")
+    print(f"Max Christoffel Symbol Magnitude: {max_gamma:.2e}")
+
     # ∆ Covariant derivative
     covDev = ufl.as_tensor(ufl.grad(v)[i, j] + Gamma[i, k, j] * v[k], (i, j))
 
@@ -401,7 +418,7 @@ def fx_(t, file, gcc, r):
     problem.bcs = bc
 
     # ∆ Iterative solver
-    incs = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20]
+    incs = [0]#, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20]
     for ii, kk in enumerate(incs):
 
         # ∆ Apply displacements as boundary conditions
@@ -449,6 +466,8 @@ def fx_(t, file, gcc, r):
         # ∆ Repeat for displacement
         disp_arr = dis.x.array
         r_disp = disp_arr.reshape((len(disp_arr) // DIM), DIM)
+
+        print(r_sig)
 
         # ∆ Store tensor data
         coords = np.array(x_n.function_space.tabulate_dof_coordinates()[:])
@@ -507,9 +526,9 @@ if __name__ == '__main__':
 
     # ∆ Indicate test cases
     # tests = ["test"] + [x for x in range(0, 18, 1)]
-    tests = [11]
+    tests = ["test", "4", "6", "14"]
 
  
     # ∆ Refinements
-    r = 300
+    r = 800
     main(tests, r)

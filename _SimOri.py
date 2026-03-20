@@ -98,12 +98,25 @@ def angle_assign(t, coords):
         return azi, ele, zs, sph
 
     # ∆ Load tile data and reduce to only unique IDs
-    data_df = pd.read_csv(f"_csv/norm_stats.csv")
+    data_df = pd.read_csv(f"_csv/norm_stats_whole.csv")
     uni = data_df["ID"].to_list()
 
     # ∆ Load segmentation 
-    data = np.load(f"_npy/seg_{t}.npy").astype(np.uint16)
-    data = np.transpose(data, (1, 0, 2))
+    # data = np.load(f"_npy/seg_{t}.npy").astype(np.uint16)
+    # data = np.transpose(data, (1, 0, 2))
+
+    # ∆ Load segmentation 
+    t1 = 0
+    t2 = 9
+
+    data1 = np.load(f"_npy/seg_{t1}.npy").astype(np.uint16)
+    data1 = np.transpose(data1, (1, 0, 2))
+    data2 = np.load(f"_npy/seg_{t2}.npy").astype(np.uint16)
+    data2 = np.transpose(data2, (1, 0, 2))
+
+    data = np.zeros_like(data1)
+    data[:, :data.shape[1]//2, :] = data1[:, data.shape[1]//2:, :]
+    data[:, data.shape[1]//2:, :] = data2[:, :data.shape[1]//2, :]
 
     # ∆ Scale and move data
     scale = np.array([PIXX, PIXY, PIXZ])
@@ -252,10 +265,10 @@ def fx_(t, file, gcc):
     # ∆ Save foundations data
     z_data.name = "Node Mapping"
     ori.name = "Orientation Vectors"
-    with io.VTXWriter(MPI.COMM_WORLD, f"_bp/_{t}/_ZSN.bp", z_data, engine="BP4") as fz:
+    with io.VTXWriter(MPI.COMM_WORLD, f"_bp/_09/_ZSN.bp", z_data, engine="BP4") as fz:
         fz.write(0)
         fz.close()
-    with io.VTXWriter(MPI.COMM_WORLD, f"_bp/_{t}/_ORI.bp", ori, engine="BP4") as fo:
+    with io.VTXWriter(MPI.COMM_WORLD, f"_bp/_09/_ORI.bp", ori, engine="BP4") as fo:
         fo.write(0)
         fo.close()
 
@@ -278,8 +291,8 @@ def main(tests, m_ref):
 if __name__ == '__main__':
 
     # ∆ Indicate test cases
-    refs = ["test"] + [x for x in range(0, 18, 1)]
+    refs = ["0"]# + [x for x in range(0, 18, 1)]
 
     # ∆ Refinements
-    r = 300
+    r = 800
     main(refs, r)
